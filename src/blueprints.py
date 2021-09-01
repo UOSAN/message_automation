@@ -50,7 +50,7 @@ def diary_form():
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
-                part = rc.get_session_0(request.form['participant'])
+                part = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return render_template('daily_diary_form.html')
@@ -77,7 +77,7 @@ def generation_form():
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
-                part = rc.get_participant_specific_data(request.form['participant'])
+                part = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return render_template('generation_form.html')
@@ -105,7 +105,7 @@ def delete_events():
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
             try:
-                phone_number = rc.get_participant_phone(participant_id)
+                phone_number = rc.get_participant(participant_id).phone_number
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return render_template('delete_form.html')
@@ -136,7 +136,7 @@ def task():
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
-                part = rc.get_participant_specific_data(request.form['participant'])
+                part = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return render_template('task_form.html')
@@ -159,7 +159,7 @@ def participant_responses(participant_id):
     rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
     try:
-        phone_number = rc.get_participant_phone(participant_id)
+        phone_number = rc.get_participant(participant_id).phone_number
     except RedcapError as err:
         return make_response((jsonify(str(err)), 404))
 
