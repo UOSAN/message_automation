@@ -102,6 +102,8 @@ def delete_events():
         if 'submit' in request.form:
             # Access form properties, get participant information, get events, and delete
             participant_id = request.form['participant']
+
+
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
             try:
@@ -110,11 +112,16 @@ def delete_events():
                 flash(str(err), 'danger')
                 return render_template('delete_form.html')
 
+            if not phone_number:
+                flash('Phone number for participant not found', 'danger')
+                return render_template('delete_form.html')
+
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                               user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
 
             begin = datetime.now()
             event_ids = apptoto.get_events(begin=begin, phone_number=phone_number)
+
             for event_id in event_ids:
                 apptoto.delete_event(event_id)
 

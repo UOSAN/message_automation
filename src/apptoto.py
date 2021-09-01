@@ -8,7 +8,7 @@ from requests.auth import HTTPBasicAuth
 
 from src.apptoto_event import ApptotoEvent
 from src.constants import MAX_EVENTS, ASH_CALENDAR_ID
-
+from src.redcap import logSomething
 
 class Apptoto:
     def __init__(self, api_token: str, user: str):
@@ -23,6 +23,7 @@ class Apptoto:
         self._user = user
         self._headers = {'Content-Type': 'application/json'}
         self._timeout = 30
+        self._burstlimit = 100 # apptoto burst rate limit, requests per minute
 
     def post_events(self, events: List[ApptotoEvent]):
         """
@@ -31,6 +32,7 @@ class Apptoto:
         :param events: List of events to create
         """
         url = f'{self._endpoint}/events'
+
         # Post 5 events at a time because Apptoto's API can't handle all events at once.
         for i in range(0, len(events), 5):
             events_slice = events[i:i + 5]
@@ -65,9 +67,13 @@ class Apptoto:
         event_ids = []
         if r.status_code == requests.codes.ok:
             events = r.json()['events']
-            event_ids = [e['id'] for e in events if not e.get('is_deleted') and e.get('calendar_id') == ASH_CALENDAR_ID]
+            event_ids = [e['id'] for e in events if e.get('calendar_id') == ASH_CALENDAR_ID]
+            logSomething('got {} events for {}'.format(len(event_ids), phone_number))
+
         else:
             print(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
+            logSomething(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
+
 
         return event_ids
 
@@ -82,6 +88,7 @@ class Apptoto:
 
         if r.status_code == requests.codes.ok:
             print(f'Deleted event - {event_id}')
+            logSomething(f'Deleted event - {event_id}')
 
     def get_conversations(self, phone_number: str) -> List[Tuple[str, str]]:
         """Get timestamp and content of participant's responses."""
