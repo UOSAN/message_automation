@@ -6,6 +6,21 @@ import requests
 from src.enums import Condition, CodedValues
 from src.participant import Participant
 
+import json
+
+# would be better to redirect stdout but for now using thing
+def logSomething(something):
+    with open('/home/LogFiles/mylog.log', 'a') as f:
+        f.write(something)
+        f.write('\n')
+
+def logFunction(func):
+    fname = func.__name__
+    def logfunc(*args, **kwargs):
+        logSomething(fname)
+        return func(*args, **kwargs)
+    return logfunc
+
 
 class RedcapError(Exception):
     def __init__(self, message):
@@ -16,7 +31,7 @@ class RedcapError(Exception):
         """
         self.message = message
 
-
+@logFunction
 def _get_session0_schema() -> Dict:
     schema = {
         "$schema": "Session 0 schema",
@@ -80,7 +95,7 @@ def _get_session0_schema() -> Dict:
     }
     return schema
 
-
+@logFunction
 def _get_session1_schema() -> Dict:
     schema = {
         "$schema": "Session 1 schema",
@@ -124,12 +139,17 @@ def _get_session1_schema() -> Dict:
     }
     return schema
 
-
-def _validate(json: str, schema: Dict):
+@logFunction
+def _validate(json, schema: Dict):
     try:
         jsonschema.validate(json, schema)
-    except (jsonschema.ValidationError, jsonschema.SchemaError) as e:
-        raise RedcapError('Response from REDCap does not match expected format') from e
+#    except (jsonschema.ValidationError, jsonschema.SchemaError) as e:
+#        raise RedcapError('Response from REDCap does not match expected format') from e
+    except (jsonschema.ValidationError) as e:
+        logSomething('validation error')
+        raise RedcapError('validation error: {}'.format(e)) from e
+    except (jsonschema.SchemaError) as e:
+        raise RedcapError('json schema error: {}'.format(e)) from e
 
 
 class Redcap:
@@ -140,15 +160,34 @@ class Redcap:
         :param api_token: API token for the REDCap project
         :param endpoint: REDCap endpoint URI
         """
+        logSomething('redcap init')
         self._endpoint = endpoint
         self._headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         self._timeout = 15
         self._data = {'token': api_token}
 
+    def get_record(self, json, participant_id: str):
+        """
+        get one redcap record for a specific participant
+        """
+        try:
+            record = next(d for d in json if d['ash_id'] == participant_id)
+        except StopIteration:
+            raise RedcapError('Subject {} not found'.format(participant_id))
+
+        return record
+
+
+    @logFunction
     def get_session_0(self, participant_id: str) -> Participant:
         session0 = self._get_session0()
-        _validate(session0, _get_session0_schema())
+        #_validate(session0, _get_session0_schema())
+        # no need to validate everyone!
 
+        record = self.get_record(session0, participant_id)
+        # this is where we would validate, need to fix schema
+
+        '''
         id_temp = None
         initials = None
         phone_number = None
@@ -177,24 +216,41 @@ class Redcap:
         if id_temp != participant_id:
             raise RedcapError(f'Unable to find session 0 in Redcap - participant ID - {participant_id}')
 
+
         if not wake_time or len(wake_time) == 0:
             raise RedcapError(f'Unable to find wake time in session 0 in Redcap - participant ID - {participant_id}')
 
         if not sleep_time or len(sleep_time) == 0:
             raise RedcapError(f'Unable to find sleep time in session 0 in Redcap - participant ID - {participant_id}')
+        '''
+
+        if not record['waketime'] or len(record['waketime']) == 0:
+            raise RedcapError(f'Unable to find wake time in session 0 in Redcap - participant ID - {participant_id}')
+
+        if not record['sleeptime'] or len(record['sleeptime']) == 0:
+            raise RedcapError(f'Unable to find sleep time in session 0 in Redcap - participant ID - {participant_id}')
+
+        message_values = []
+        task_values = []
+        message_values.append(CodedValues(int(record['value1_s0'])))
+        message_values.append(CodedValues(int(record['value2_s0'])))
+
+        task_values.append(CodedValues(int(record['value1_s0'])))
+        task_values.append(CodedValues(int(record['value7_s0'])))
 
         part = Participant()
         part.participant_id = participant_id
-        part.initials = initials
-        part.phone_number = phone_number
-        part.session0_date = session_0_date_str
-        part.quit_date = quit_date_str
-        part.wake_time = wake_time
-        part.sleep_time = sleep_time
+        part.initials = record['initials']
+        part.phone_number = record['phone']
+        part.session0_date = record['date_s0']
+        part.quit_date = record['quitdate']
+        part.wake_time = record['waketime']
+        part.sleep_time = record['sleeptime']
         part.message_values = message_values
         part.task_values = task_values
         return part
 
+    @logFunction
     def get_participant_specific_data(self, participant_id: str) -> Participant:
         """
         Get participant phone number, usual wake time, and usual sleep time for participant_id.
@@ -204,7 +260,7 @@ class Redcap:
         part = self.get_session_0(participant_id)
 
         session1 = self._get_session1()
-        _validate(session1, _get_session1_schema())
+        #_validate(session1, _get_session1_schema())
 
         if len(session1) > 0:
             for s1 in session1:
@@ -218,10 +274,12 @@ class Redcap:
 
         return part
 
+    @logFunction
     def get_participant_phone(self, participant_id: str) -> str:
+        logSomething(participant_id)
         phone_number = None
         session0 = self._get_session0()
-        _validate(session0, _get_session0_schema())
+        #_validate(session0, _get_session0_schema())
 
         for s0 in session0:
             id_ = s0['ash_id']
@@ -233,14 +291,17 @@ class Redcap:
 
         return phone_number
 
+    @logFunction
     def _make_request(self, request_data: Dict[str, str], fields_for_error: str):
         request_data.update(self._data)
         r = requests.post(url=self._endpoint, data=request_data, headers=self._headers, timeout=self._timeout)
         if r.status_code == requests.codes.ok:
+            logSomething(json.dumps(r.json()))
             return r.json()
         else:
             raise RedcapError(f'Unable to get {fields_for_error} from Redcap - {str(r.status_code)}')
 
+    @logFunction
     def _get_session0(self):
         request_data = {'content': 'record',
                         'format': 'json',
@@ -257,6 +318,7 @@ class Redcap:
                         'events[0]': 'session_0_arm_1'}
         return self._make_request(request_data, 'Session 0 data')
 
+    @logFunction
     def _get_session1(self):
         request_data = {'content': 'record',
                         'format': 'json',

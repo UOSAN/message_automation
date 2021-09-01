@@ -9,11 +9,21 @@ from werkzeug.datastructures import ImmutableMultiDict
 
 from src.apptoto import Apptoto
 from src.event_generator import EventGenerator
-from src.redcap import Redcap, RedcapError
+from src.redcap import Redcap, RedcapError, logSomething
 
 bp = Blueprint('blueprints', __name__)
 
 
+
+def logFunction(func):
+    fname = func.__name__
+    def logfunc(*args, **kwargs):
+        logSomething(fname)
+        return func(*args, **kwargs)
+    return logfunc
+
+
+@logFunction
 def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
     errors = []
     if len(form_data['participant']) != 6 or not form_data['participant'].startswith('ASH'):
@@ -24,7 +34,7 @@ def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str
     else:
         return None
 
-
+@logFunction
 @bp.route('/diary', methods=['GET', 'POST'])
 def diary_form():
     if request.method == 'GET':
@@ -51,7 +61,7 @@ def diary_form():
                 flash('Failed to create daily diary round 1', 'danger')
             return render_template('daily_diary_form.html')
 
-
+@logFunction
 @bp.route('/', methods=['GET', 'POST'])
 def generation_form():
     if request.method == 'GET':
@@ -81,12 +91,14 @@ def generation_form():
                 flash('Failed to create some messages', 'danger')
             return render_template('generation_form.html')
 
-
+@logFunction
 @bp.route('/delete', methods=['GET', 'POST'])
 def delete_events():
     if request.method == 'GET':
+        logSomething('get')
         return render_template('delete_form.html')
     elif request.method == 'POST':
+        logSomething('post')
         if 'submit' in request.form:
             # Access form properties, get participant information, get events, and delete
             participant_id = request.form['participant']
@@ -109,7 +121,7 @@ def delete_events():
             flash('Deleted messages', 'success')
             return render_template('delete_form.html')
 
-
+@logFunction
 @bp.route('/task', methods=['GET', 'POST'])
 def task():
     if request.method == 'GET':
@@ -135,7 +147,7 @@ def task():
             f = eg.task_input_file()
             return send_file(f, mimetype='text/csv', as_attachment=True)
 
-
+@logFunction
 @bp.route('/count/<participant_id>', methods=['GET'])
 def participant_responses(participant_id):
     part = ImmutableMultiDict({'participant': participant_id})
