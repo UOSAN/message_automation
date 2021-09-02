@@ -7,9 +7,11 @@ from flask import (
 from flask.json import jsonify
 from werkzeug.datastructures import ImmutableMultiDict
 
-from src.apptoto import Apptoto
+from src.apptoto import Apptoto, ApptotoError
 from src.event_generator import EventGenerator
 from src.redcap import Redcap, RedcapError, logSomething
+
+import threading
 
 bp = Blueprint('blueprints', __name__)
 
@@ -21,6 +23,21 @@ def logFunction(func):
         logSomething(fname)
         return func(*args, **kwargs)
     return logfunc
+
+def delete_events_threaded(apptoto, phone_number):
+    begin = datetime.now()
+    event_ids = apptoto.get_events(begin=begin, phone_number=phone_number)
+
+    try:
+        for event_id in event_ids:
+            apptoto.delete_event(event_id)
+            logSomething('deleted {}'.format(event_id))
+
+        logSomething('Deleted {} messages'.format(len(event_ids), 'success'))
+
+    except ApptotoError as err:
+        logSomething(str(err))
+
 
 
 @logFunction
@@ -57,8 +74,12 @@ def diary_form():
 
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
                                 instance_path=current_app.instance_path)
-            if not eg.daily_diary():
-                flash('Failed to create daily diary round 1', 'danger')
+            try:
+                eg.daily_diary()
+            
+            except ApptotoError as err:
+                flash(str(err), 'danger')
+            
             return render_template('daily_diary_form.html')
 
 @logFunction
@@ -84,11 +105,14 @@ def generation_form():
 
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
                                 instance_path=current_app.instance_path)
-            if eg.generate():
+            try:
+                eg.generate()
                 f = eg.write_file()
                 return send_file(f, mimetype='text/csv', as_attachment=True)
-            else:
-                flash('Failed to create some messages', 'danger')
+            
+            except ApptotoError as err:
+                flash(str(err), 'danger')
+
             return render_template('generation_form.html')
 
 @logFunction
@@ -117,15 +141,27 @@ def delete_events():
                 return render_template('delete_form.html')
 
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
+                                      user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
+            x = threading.Thread(target = delete_events_threaded, args = (apptoto, phone_number,))
+            x.start()
+            flash('Message deletion started')
+            '''
+            apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                               user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
 
             begin = datetime.now()
             event_ids = apptoto.get_events(begin=begin, phone_number=phone_number)
 
-            for event_id in event_ids:
-                apptoto.delete_event(event_id)
+            try:
+                for event_id in event_ids:
+                    apptoto.delete_event(event_id)
+                    logSomething('deleted {}'.format(event_id))
 
-            flash('Deleted messages', 'success')
+                flash('Deleted {} messages'.format(len(event_ids), 'success'))
+
+            except ApptotoError as err:
+                flash(str(err), 'danger')
+            '''
             return render_template('delete_form.html')
 
 @logFunction
@@ -151,7 +187,13 @@ def task():
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
                                 instance_path=current_app.instance_path)
 
-            f = eg.task_input_file()
+            try:
+                f = eg.task_input_file()
+
+            except ApptotoError as err:
+                flash(str(err), 'danger')
+                return render_template('task_form.html')
+
             return send_file(f, mimetype='text/csv', as_attachment=True)
 
 @logFunction
@@ -173,5 +215,10 @@ def participant_responses(participant_id):
     apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                       user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
 
-    conversations = apptoto.get_conversations(phone_number=phone_number)
+    try:
+        conversations = apptoto.get_conversations(phone_number=phone_number)
+    except ApptotoError as err:
+        flash(str(err), 'danger')
+        return make_response((jsonify(str(err)), 404))
+
     return make_response(jsonify(conversations), 200)

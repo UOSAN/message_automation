@@ -170,7 +170,7 @@ class EventGenerator:
                                    participants=[copy.copy(part)]))
 
         if len(events) > 0:
-            return apptoto.post_events(events)
+            apptoto.post_events(events)
 
     def generate(self) -> bool:
         """
@@ -272,7 +272,7 @@ class EventGenerator:
                                                    content=e.content,
                                                    participants=[copy.copy(part)]))
 
-            return apptoto.post_events(apptoto_events)
+            apptoto.post_events(apptoto_events)
 
     def write_file(self):
         f = Path.home() / (self._participant.participant_id + '.csv')

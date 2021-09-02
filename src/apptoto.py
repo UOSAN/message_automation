@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+import time
 from typing import List, Tuple
 
 import jsonpickle
@@ -9,6 +10,17 @@ from requests.auth import HTTPBasicAuth
 from src.apptoto_event import ApptotoEvent
 from src.constants import MAX_EVENTS, ASH_CALENDAR_ID
 from src.redcap import logSomething
+
+
+class ApptotoError(Exception):
+    def __init__(self, message):
+        """
+        An exception for interactions with apptoto.
+
+        :param message: A string describing the error
+        """
+        self.message = message
+
 
 class Apptoto:
     def __init__(self, api_token: str, user: str):
@@ -22,8 +34,11 @@ class Apptoto:
         self._api_token = api_token
         self._user = user
         self._headers = {'Content-Type': 'application/json'}
-        self._timeout = 30
-        self._burstlimit = 100 # apptoto burst rate limit, requests per minute
+        self._timeout = 120
+
+        # seconds between requests for apptoto burst rate limit, 100 requests per minute
+        self._request_limit = 0.6
+        self._last_request_time = time.time()
 
     def post_events(self, events: List[ApptotoEvent]):
         """
@@ -38,31 +53,43 @@ class Apptoto:
             events_slice = events[i:i + 5]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True}, unpicklable=False)
             print('Posting events to apptoto')
+
+            while (time.time() - self._last_request_time) < self._request_limit:
+                time.sleep(0.5)    
+            
             r = requests.post(url=url,
                               data=request_data,
                               headers=self._headers,
                               timeout=self._timeout,
                               auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
+            self._last_request_time = time.time()
+
             if r.status_code == requests.codes.ok:
                 print('Posted events to apptoto')
             else:
                 print(f'Failed to post events {i} through {i+5}, starting at {events[i].start_time}')
                 print(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
-                return r.status_code == requests.codes.ok
+                raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
-        return True
+       
 
     def get_events(self, begin: datetime, phone_number: str) -> List[int]:
         url = f'{self._endpoint}/events'
         params = {'begin': begin.isoformat(),
                   'phone_number': phone_number,
                   'page_size': MAX_EVENTS}
+
+        while (time.time() - self._last_request_time) < self._request_limit:
+            time.sleep(0.5)    
+
         r = requests.get(url=url,
                          params=params,
                          headers=self._headers,
                          timeout=self._timeout,
                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        self._last_request_time = time.time()
 
         event_ids = []
         if r.status_code == requests.codes.ok:
@@ -73,22 +100,30 @@ class Apptoto:
         else:
             print(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
             logSomething(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
-
+            raise ApptotoError('Failed to get events: {}'.format(r.status_code))
 
         return event_ids
 
     def delete_event(self, event_id: int):
         url = f'{self._endpoint}/events'
         params = {'id': event_id}
+
+        while (time.time() - self._last_request_time) < self._request_limit:
+            time.sleep(0.1)    
+        self._last_request_time = time.time()
         r = requests.delete(url=url,
                             params=params,
                             headers=self._headers,
                             timeout=self._timeout,
                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
+        
+
         if r.status_code == requests.codes.ok:
             print(f'Deleted event - {event_id}')
             logSomething(f'Deleted event - {event_id}')
+        else:
+            raise ApptotoError('Failed to delete event {}: error {}'.format(event_id, r.status_code))
 
     def get_conversations(self, phone_number: str) -> List[Tuple[str, str]]:
         """Get timestamp and content of participant's responses."""
@@ -97,11 +132,17 @@ class Apptoto:
         params = {'begin': begin,
                   'phone_number': phone_number,
                   'include_conversations': True}
+
+        while (time.time() - self._last_request_time) < self._request_limit:
+            time.sleep(0.5)    
+
         r = requests.get(url=url,
                          params=params,
                          headers=self._headers,
                          timeout=self._timeout,
                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        self._last_request_time = time.time()
 
         conversations = []
         if r.status_code == requests.codes.ok:
@@ -120,5 +161,6 @@ class Apptoto:
                                     conversations.append((m['at'], m['content']))
         else:
             print(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
+            raise ApptotoError('Failed to get conversations: {}'.format(r.status_code))
 
         return conversations
