@@ -55,7 +55,7 @@ class Apptoto:
             print('Posting events to apptoto')
 
             while (time.time() - self._last_request_time) < self._request_limit:
-                time.sleep(0.5)    
+                time.sleep(0.1)    
             
             r = requests.post(url=url,
                               data=request_data,
@@ -81,7 +81,7 @@ class Apptoto:
                   'page_size': MAX_EVENTS}
 
         while (time.time() - self._last_request_time) < self._request_limit:
-            time.sleep(0.5)    
+            time.sleep(0.1)    
 
         r = requests.get(url=url,
                          params=params,
@@ -110,14 +110,15 @@ class Apptoto:
 
         while (time.time() - self._last_request_time) < self._request_limit:
             time.sleep(0.1)    
-        self._last_request_time = time.time()
+
+        
         r = requests.delete(url=url,
                             params=params,
                             headers=self._headers,
                             timeout=self._timeout,
                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
-        
+        self._last_request_time = time.time()
 
         if r.status_code == requests.codes.ok:
             print(f'Deleted event - {event_id}')
@@ -134,7 +135,7 @@ class Apptoto:
                   'include_conversations': True}
 
         while (time.time() - self._last_request_time) < self._request_limit:
-            time.sleep(0.5)    
+            time.sleep(0.1)    
 
         r = requests.get(url=url,
                          params=params,
