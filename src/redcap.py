@@ -78,7 +78,7 @@ class Redcap:
 
         return record
 
-    @logFunction
+
     def _make_request(self, request_data: Dict[str, str], fields_for_error: str):
         request_data.update(self._data)
         r = requests.post(url=self._endpoint, data=request_data, headers=self._headers, timeout=self._timeout)
@@ -87,7 +87,6 @@ class Redcap:
         else:
             raise RedcapError(f'Unable to get {fields_for_error} from Redcap - {str(r.status_code)}')
 
-    @logFunction
     def _get_session0(self):
         request_data = {'content': 'record',
                         'format': 'json',
@@ -104,7 +103,6 @@ class Redcap:
                         'events[0]': 'session_0_arm_1'}
         return self._make_request(request_data, 'Session 0 data')
 
-    @logFunction
     def _get_session1(self):
         request_data = {'content': 'record',
                         'format': 'json',
