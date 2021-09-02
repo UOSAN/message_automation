@@ -26,7 +26,6 @@ class Redcap:
         :param api_token: API token for the REDCap project
         :param endpoint: REDCap endpoint URI
         """
-        logSomething('redcap init')
         self._endpoint = endpoint
         self._headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         self._timeout = 15
