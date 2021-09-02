@@ -7,19 +7,6 @@ from src.participant import Participant
 
 import json
 
-# would be better to redirect stdout but for now using thing
-def logSomething(something):
-    with open('/home/LogFiles/mylog.log', 'a') as f:
-        f.write(something)
-        f.write('\n')
-
-def logFunction(func):
-    fname = func.__name__
-    def logfunc(*args, **kwargs):
-        logSomething(fname)
-        return func(*args, **kwargs)
-    return logfunc
-
 
 class RedcapError(Exception):
     def __init__(self, message):

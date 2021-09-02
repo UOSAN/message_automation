@@ -9,7 +9,8 @@ from werkzeug.datastructures import ImmutableMultiDict
 
 from src.apptoto import Apptoto, ApptotoError
 from src.event_generator import EventGenerator
-from src.redcap import Redcap, RedcapError, logSomething
+from src.redcap import Redcap, RedcapError
+from src.participant import Participant
 
 import threading
 
@@ -17,30 +18,20 @@ bp = Blueprint('blueprints', __name__)
 
 
 
-def logFunction(func):
-    fname = func.__name__
-    def logfunc(*args, **kwargs):
-        logSomething(fname)
-        return func(*args, **kwargs)
-    return logfunc
-
-def delete_events_threaded(apptoto, phone_number):
+def delete_events_threaded(apptoto, participant):
     begin = datetime.now()
-    event_ids = apptoto.get_events(begin=begin, phone_number=phone_number)
+    event_ids = apptoto.get_events(begin=begin, participant=participant)
 
     try:
         for event_id in event_ids:
             apptoto.delete_event(event_id)
-            logSomething('deleted {}'.format(event_id))
 
-        logSomething('Deleted {} messages'.format(len(event_ids), 'success'))
+        print_progress('Deleted {} messages for ().'.format(len(event_ids), participant.participant_id, 'success'))
 
     except ApptotoError as err:
-        logSomething(str(err))
+        print_progress(str(err))
 
 
-
-@logFunction
 def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
     errors = []
     if len(form_data['participant']) != 6 or not form_data['participant'].startswith('ASH'):
@@ -51,7 +42,7 @@ def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str
     else:
         return None
 
-@logFunction
+
 @bp.route('/diary', methods=['GET', 'POST'])
 def diary_form():
     if request.method == 'GET':
@@ -82,7 +73,7 @@ def diary_form():
             
             return render_template('daily_diary_form.html')
 
-@logFunction
+
 @bp.route('/', methods=['GET', 'POST'])
 def generation_form():
     if request.method == 'GET':
@@ -115,14 +106,13 @@ def generation_form():
 
             return render_template('generation_form.html')
 
-@logFunction
+
 @bp.route('/delete', methods=['GET', 'POST'])
 def delete_events():
     if request.method == 'GET':
-        logSomething('get')
         return render_template('delete_form.html')
+
     elif request.method == 'POST':
-        logSomething('post')
         if 'submit' in request.form:
             # Access form properties, get participant information, get events, and delete
             participant_id = request.form['participant']
@@ -131,44 +121,26 @@ def delete_events():
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
             try:
-                phone_number = rc.get_participant(participant_id).phone_number
+                participant = rc.get_participant(participant_id)
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return render_template('delete_form.html')
 
-            if not phone_number:
-                flash('Phone number for participant not found', 'danger')
-                return render_template('delete_form.html')
-
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                                       user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-            x = threading.Thread(target = delete_events_threaded, args = (apptoto, phone_number,))
+            x = threading.Thread(target = delete_events_threaded, args = (apptoto, participant,))
             x.start()
+
             flash('Message deletion started')
-            '''
-            apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
-                              user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
 
-            begin = datetime.now()
-            event_ids = apptoto.get_events(begin=begin, phone_number=phone_number)
-
-            try:
-                for event_id in event_ids:
-                    apptoto.delete_event(event_id)
-                    logSomething('deleted {}'.format(event_id))
-
-                flash('Deleted {} messages'.format(len(event_ids), 'success'))
-
-            except ApptotoError as err:
-                flash(str(err), 'danger')
-            '''
             return render_template('delete_form.html')
 
-@logFunction
+
 @bp.route('/task', methods=['GET', 'POST'])
 def task():
     if request.method == 'GET':
         return render_template('task_form.html')
+ 
     elif request.method == 'POST':
         if 'value-task' in request.form:
             error = _validate_participant_id(request.form)
@@ -196,7 +168,7 @@ def task():
 
             return send_file(f, mimetype='text/csv', as_attachment=True)
 
-@logFunction
+
 @bp.route('/count/<participant_id>', methods=['GET'])
 def participant_responses(participant_id):
     part = ImmutableMultiDict({'participant': participant_id})
@@ -209,6 +181,7 @@ def participant_responses(participant_id):
 
     try:
         phone_number = rc.get_participant(participant_id).phone_number
+        
     except RedcapError as err:
         return make_response((jsonify(str(err)), 404))
 

@@ -9,7 +9,8 @@ from requests.auth import HTTPBasicAuth
 
 from src.apptoto_event import ApptotoEvent
 from src.constants import MAX_EVENTS, ASH_CALENDAR_ID
-from src.redcap import logSomething
+from src.progress_log import print_progress
+from src.participant import Participant
 
 
 class ApptotoError(Exception):
@@ -52,7 +53,7 @@ class Apptoto:
         for i in range(0, len(events), 5):
             events_slice = events[i:i + 5]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True}, unpicklable=False)
-            print('Posting events to apptoto')
+            print_progress('Posting {} events to apptoto'.format(len(events_slice)))
 
             while (time.time() - self._last_request_time) < self._request_limit:
                 time.sleep(0.1)    
@@ -66,41 +67,55 @@ class Apptoto:
             self._last_request_time = time.time()
 
             if r.status_code == requests.codes.ok:
-                print('Posted events to apptoto')
+                print_progress('Posted events to apptoto')
             else:
-                print(f'Failed to post events {i} through {i+5}, starting at {events[i].start_time}')
-                print(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
+                print_progress(f'Failed to post events {i} through {i+5}, starting at {events[i].start_time}')
+                print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
        
 
-    def get_events(self, begin: datetime, phone_number: str) -> List[int]:
+    def get_events(self, begin: datetime, participant:Participant) -> List[int]:
         url = f'{self._endpoint}/events'
-        params = {'begin': begin.isoformat(),
-                  'phone_number': phone_number,
-                  'page_size': MAX_EVENTS}
-
-        while (time.time() - self._last_request_time) < self._request_limit:
-            time.sleep(0.1)    
-
-        r = requests.get(url=url,
-                         params=params,
-                         headers=self._headers,
-                         timeout=self._timeout,
-                         auth=HTTPBasicAuth(username=self._user, password=self._api_token))
-
-        self._last_request_time = time.time()
 
         event_ids = []
-        if r.status_code == requests.codes.ok:
-            events = r.json()['events']
-            event_ids = [e['id'] for e in events if e.get('calendar_id') == ASH_CALENDAR_ID]
-            logSomething('got {} events for {}'.format(len(event_ids), phone_number))
+        page = 0
 
-        else:
-            print(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
-            logSomething(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
-            raise ApptotoError('Failed to get events: {}'.format(r.status_code))
+        while True:
+            page += 1
+            params = {'begin': begin.isoformat(),
+                      'phone_number': participant.phone_number,
+                      'page_size': MAX_EVENTS,
+                      'page': page}
+
+            while (time.time() - self._last_request_time) < self._request_limit:
+                time.sleep(0.1)    
+
+            r = requests.get(url=url,
+                             params=params,
+                             headers=self._headers,
+                             timeout=self._timeout,
+                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+            self._last_request_time = time.time()
+
+            
+            if r.status_code == requests.codes.ok:
+                events = r.json()['events']
+
+            else:
+                print_progress(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
+                raise ApptotoError('Failed to get events: {}'.format(r.status_code))
+
+            if events:
+                messages = [e['id'] for e in events if not e.get('is_deleted') 
+                    and e.get('calendar_id') == ASH_CALENDAR_ID]
+                event_ids.extend(messages)
+                print_progress('got {} messages from {} events for {}'.format(len(messages), 
+                    len(events), participant.participant_id))
+
+            else:
+                break
 
         return event_ids
 
@@ -121,8 +136,7 @@ class Apptoto:
         self._last_request_time = time.time()
 
         if r.status_code == requests.codes.ok:
-            print(f'Deleted event - {event_id}')
-            logSomething(f'Deleted event - {event_id}')
+            print_progress(f'Deleted event - {event_id}')
         else:
             raise ApptotoError('Failed to delete event {}: error {}'.format(event_id, r.status_code))
 
@@ -161,7 +175,7 @@ class Apptoto:
                                 if 'replied' in m['event_type']:
                                     conversations.append((m['at'], m['content']))
         else:
-            print(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
+            print_progress(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
             raise ApptotoError('Failed to get conversations: {}'.format(r.status_code))
 
         return conversations
