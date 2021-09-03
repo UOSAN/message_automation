@@ -11,6 +11,7 @@ from src.apptoto import Apptoto, ApptotoError
 from src.event_generator import EventGenerator
 from src.redcap import Redcap, RedcapError
 from src.participant import Participant
+from src.progress_log import print_progress
 
 import threading
 
@@ -19,14 +20,19 @@ bp = Blueprint('blueprints', __name__)
 
 
 def delete_events_threaded(apptoto, participant):
+    print_progress('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
     event_ids = apptoto.get_events(begin=begin, participant=participant)
+    print_progress('Found {} messages total'.format(len(event_ids)))
 
+    deleted = 0
     try:
         for event_id in event_ids:
             apptoto.delete_event(event_id)
+            deleted += 1
+            print_progress('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
 
-        print_progress('Deleted {} messages for ().'.format(len(event_ids), participant.participant_id, 'success'))
+        print_progress('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
 
     except ApptotoError as err:
         print_progress(str(err))
@@ -131,7 +137,7 @@ def delete_events():
             x = threading.Thread(target = delete_events_threaded, args = (apptoto, participant,))
             x.start()
 
-            flash('Message deletion started')
+            flash('Message deletion started for {}'.participant.participant_id)
 
             return render_template('delete_form.html')
 

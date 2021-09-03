@@ -111,7 +111,7 @@ class Apptoto:
                 messages = [e['id'] for e in events if not e.get('is_deleted') 
                     and e.get('calendar_id') == ASH_CALENDAR_ID]
                 event_ids.extend(messages)
-                print_progress('got {} messages from {} events for {}'.format(len(messages), 
+                print_progress('Found {} messages from {} events for {}'.format(len(messages), 
                     len(events), participant.participant_id))
 
             else:
