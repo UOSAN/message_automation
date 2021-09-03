@@ -49,9 +49,11 @@ class Apptoto:
         """
         url = f'{self._endpoint}/events'
 
-        # Post 5 events at a time because Apptoto's API can't handle all events at once.
-        for i in range(0, len(events), 5):
-            events_slice = events[i:i + 5]
+        # Post N events at a time because Apptoto's API can't handle all events at once.
+        # (but how many can it handle?)
+        N = 5
+        for i in range(0, len(events), N):
+            events_slice = events[i:i + N]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True}, unpicklable=False)
             print_progress('Posting {} events to apptoto'.format(len(events_slice)))
 
@@ -69,7 +71,7 @@ class Apptoto:
             if r.status_code == requests.codes.ok:
                 print_progress('Posted events to apptoto')
             else:
-                print_progress(f'Failed to post events {i} through {i+5}, starting at {events[i].start_time}')
+                print_progress(f'Failed to post events {i} through {i+N}, starting at {events[i].start_time}')
                 print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
@@ -135,9 +137,7 @@ class Apptoto:
 
         self._last_request_time = time.time()
 
-        if r.status_code == requests.codes.ok:
-            print_progress(f'Deleted event - {event_id}')
-        else:
+        if not r.status_code == requests.codes.ok:
             raise ApptotoError('Failed to delete event {}: error {}'.format(event_id, r.status_code))
 
     def get_conversations(self, phone_number: str) -> List[Tuple[str, str]]:

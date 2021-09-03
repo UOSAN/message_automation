@@ -1,4 +1,3 @@
-import copy
 import csv
 import logging
 import random
@@ -10,7 +9,6 @@ from typing import Dict, List
 
 from src.apptoto import Apptoto
 from src.apptoto_event import ApptotoEvent
-from src.apptoto_participant import ApptotoParticipant
 from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition
 from src.message import MessageLibrary
@@ -131,8 +129,7 @@ class EventGenerator:
         """
         apptoto = Apptoto(api_token=self._config['apptoto_api_token'],
                           user=self._config['apptoto_user'])
-        part = ApptotoParticipant(name=self._participant.initials, phone=self._participant.phone_number)
-
+        
         first_day = self._participant.daily_diary_time()
 
         events = []
@@ -145,7 +142,7 @@ class EventGenerator:
                                        start_time=t,
                                        end_time=t,
                                        content=content,
-                                       participants=[copy.copy(part)]))
+                                       participants=[self._participant]))
 
         # Add quit_message_date date boosters
         s = datetime.strptime(f'{self._participant.quit_date} {self._participant.wake_time}', '%Y-%m-%d %H:%M')
@@ -157,7 +154,7 @@ class EventGenerator:
                                    start_time=quit_message_date,
                                    end_time=quit_message_date,
                                    content=content,
-                                   participants=[copy.copy(part)]))
+                                   participants=[self._participant]))
 
         quit_message_date = quit_message_date - timedelta(days=1)
         content = 'UO: Day Before'
@@ -167,7 +164,7 @@ class EventGenerator:
                                    start_time=quit_message_date,
                                    end_time=quit_message_date,
                                    content=content,
-                                   participants=[copy.copy(part)]))
+                                   participants=[self._participant]))
 
         if len(events) > 0:
             apptoto.post_events(events)
@@ -180,7 +177,6 @@ class EventGenerator:
         """
         apptoto = Apptoto(api_token=self._config['apptoto_api_token'],
                           user=self._config['apptoto_user'])
-        part = ApptotoParticipant(name=self._participant.initials, phone=self._participant.phone_number)
 
         events = []
         messages = MessageLibrary(path=self._path)
@@ -270,7 +266,7 @@ class EventGenerator:
                                                    start_time=e.time,
                                                    end_time=e.time,
                                                    content=e.content,
-                                                   participants=[copy.copy(part)]))
+                                                   participants=[self._participant]))
 
             apptoto.post_events(apptoto_events)
 
