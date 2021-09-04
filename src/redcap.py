@@ -18,6 +18,18 @@ class RedcapError(Exception):
         self.message = message
 
 
+def _get_record(json, participant_id: str):
+    """
+    get one redcap record for a specific participant
+    """
+    try:
+        record = next(d for d in json if d['ash_id'] == participant_id)
+    except StopIteration:
+        record = None
+
+    return record
+
+
 class Redcap:
     def __init__(self, api_token: str, endpoint: str = 'https://redcap.uoregon.edu/api/'):
         """
@@ -36,7 +48,7 @@ class Redcap:
         return  participant object from redcap data
         """
         session = self._get_session0()
-        record = self._get_record(session, participant_id)
+        record = _get_record(session, participant_id)
         if not record:
             raise RedcapError('Session 0 for subject {} not found'.format(participant_id))
 
@@ -60,23 +72,11 @@ class Redcap:
         part.task_values = task_values
 
         session = self._get_session1()
-        record = self._get_record(session, participant_id)
+        record = _get_record(session, participant_id)
         if record:
-            part.condition = record['condition']
+            part.condition = int(record['condition'])
 
         return part
-
-    def _get_record(self, json, participant_id: str):
-        """
-        get one redcap record for a specific participant
-        """
-        try:
-            record = next(d for d in json if d['ash_id'] == participant_id)
-        except StopIteration:
-            record = None
-
-        return record
-
 
     def _make_request(self, request_data: Dict[str, str], fields_for_error: str):
         request_data.update(self._data)

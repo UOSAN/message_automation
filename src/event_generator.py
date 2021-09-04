@@ -1,5 +1,3 @@
-import csv
-import logging
 import random
 import zipfile
 from collections import namedtuple
@@ -7,12 +5,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
 
+import pandas as pd
+
 from src.apptoto import Apptoto
 from src.apptoto_event import ApptotoEvent
 from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition
-from src.message import MessageLibrary
 from src.participant import Participant
+from src.message import Messages
 
 SMS_TITLE = 'ASH SMS'
 CIGS_TITLE = 'ASH CIGS'
@@ -129,7 +129,7 @@ class EventGenerator:
         """
         apptoto = Apptoto(api_token=self._config['apptoto_api_token'],
                           user=self._config['apptoto_user'])
-        
+
         first_day = self._participant.daily_diary_time()
 
         events = []
@@ -169,7 +169,7 @@ class EventGenerator:
         if len(events) > 0:
             apptoto.post_events(events)
 
-    def generate(self) -> bool:
+    def generate(self):
         """
         Generate events for intervention messages, messages about daily cigarette usage,
         messages for boosters, daily diary rounds 2, 3 and 4.
@@ -179,11 +179,11 @@ class EventGenerator:
                           user=self._config['apptoto_user'])
 
         events = []
-        messages = MessageLibrary(path=self._path)
+
+        self._messages = Messages(self._path)
         num_required_messages = 28 * (MESSAGES_PER_DAY_1 + MESSAGES_PER_DAY_2)
-        self._messages = messages.get_messages_by_condition(self._participant.condition,
-                                                            self._participant.message_values,
-                                                            num_required_messages)
+        self._messages.filter_by_condition(self._participant.condition, self._participant.message_values,
+                                           num_required_messages)
 
         s = datetime.strptime(f'{self._participant.quit_date} {self._participant.wake_time}', '%Y-%m-%d %H:%M')
         e = datetime.strptime(f'{self._participant.quit_date} {self._participant.sleep_time}', '%Y-%m-%d %H:%M')
@@ -202,8 +202,8 @@ class EventGenerator:
             # Send 5 messages a day for the first 28 days
             times_list = random_times(start, end, MESSAGES_PER_DAY_1)
             for t in times_list:
-                # Prepend each message with "UO: "
-                content = "UO: " + self._messages[n].message
+                # Prepend each message with "UO: " ERROR here
+                content = "UO: " + self._messages[n]
                 events.append(Event(time=t, title=SMS_TITLE, content=content))
                 n = n + 1
 
@@ -216,7 +216,7 @@ class EventGenerator:
             times_list = random_times(start, end, MESSAGES_PER_DAY_2)
             for t in times_list:
                 # Prepend each message with "UO: "
-                content = "UO: " + self._messages[n].message
+                content = "UO: " + self._messages[n]
                 events.append(Event(time=t, title=SMS_TITLE, content=content))
                 n = n + 1
 
@@ -272,40 +272,19 @@ class EventGenerator:
 
     def write_file(self):
         f = Path.home() / (self._participant.participant_id + '.csv')
-        with open(f, 'w', newline='') as csvfile:
-            fieldnames = ['UO_ID', 'Message']
-            filewriter = csv.DictWriter(csvfile,
-                                        delimiter=',',
-                                        quotechar='\"',
-                                        quoting=csv.QUOTE_MINIMAL,
-                                        fieldnames=fieldnames)
-            filewriter.writeheader()
-            for m in self._messages:
-                filewriter.writerow({'UO_ID': m.message_id, 'Message': m.message})
-
+        self._messages.write_to_file(f, columns=['UO_ID', 'Message'])
         return f
 
     def task_input_file(self):
-        messages = MessageLibrary(path=self._path)
+        message_df = pd.read_csv(self._path)
 
         for session in range(1, 3):
             for run in range(1, 5):
                 file_name = Path.home() / f'VAFF_{self._participant.participant_id}_Session{session}_Run{run}.csv'
 
-                with open(file_name, 'w', newline='') as csvfile:
-                    fieldnames = ['message', 'iti']
-                    filewriter = csv.DictWriter(csvfile,
-                                                delimiter=',',
-                                                quotechar='\"',
-                                                quoting=csv.QUOTE_MINIMAL,
-                                                fieldnames=fieldnames)
-                    filewriter.writeheader()
-
-                    task_messages = messages.get_messages_by_condition(Condition.VALUES,
-                                                                       self._participant.task_values,
-                                                                       TASK_MESSAGES)
-
-                    for i, m in enumerate(task_messages):
-                        filewriter.writerow({fieldnames[0]: m.message, fieldnames[1]: ITI[i]})
+                messages = Messages(file_name)
+                messages.filter_by_condition(Condition.VALUES, self._participant.task_values, TASK_MESSAGES)
+                messages.add_column('iti', ITI)
+                messages.print_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
         return _create_archive(self._participant.participant_id)

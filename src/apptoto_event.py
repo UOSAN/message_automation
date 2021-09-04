@@ -44,4 +44,4 @@ class ApptotoEvent:
 
         self.participants = []
         for participant in participants:
-            self.participants.append(ApptotoParticipant(participant.initials, participant.phone))
+            self.participants.append(ApptotoParticipant(participant.initials, participant.phone_number))

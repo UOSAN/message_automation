@@ -2,4 +2,5 @@ requests
 jsonpickle
 flask
 Werkzeug
+pandas
 -r tests/requirements.txt

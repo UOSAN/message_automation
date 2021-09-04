@@ -1,72 +1,42 @@
 import csv
 from random import shuffle
 from typing import List
+import pandas as pd
 
 from src.enums import Condition, CodedValues
 
 
-class IndividualMessage:
-    def __init__(self, random_id: int, message: str, condition: Condition, coded_values: CodedValues):
-        """
-        An individual message and its metadata.
-
-        :param random_id: Random identifier of message
-        :param message: The message text itself
-        :param condition: The condition the message corresponds to
-        :param coded_values: The values expressed in the message
-        """
-        self._id = random_id
-        self.message = message
-        self._condition = condition
-        self._coded_values = coded_values
-
-    @property
-    def message_id(self):
-        return self._id
-
-    @property
-    def condition(self):
-        return self._condition
-
-    @property
-    def coded_value(self):
-        return self._coded_values
-
-
-class MessageLibrary:
-    def __init__(self, path: str):
+class Messages:
+    def __init__(self, path):
         """
         Read messages and associated metadata.
 
         :param path: File containing messages
         """
-        self._messages = []
-        with open(path) as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                identifier = int(row['UO_ID'])
-                condition = Condition(int(row['ConditionNo']))
-                if condition == Condition.VALUES:
-                    v = CodedValues[row['Value1']]
-                else:
-                    v = CodedValues.none
+        self._messages = pd.read_csv(path)
 
-                m = IndividualMessage(random_id=identifier,
-                                      message=row['Message'],
-                                      condition=condition,
-                                      coded_values=v)
-                self._messages.append(m)
+    def __getitem__(self, key):
+        return self._messages.loc[key].Message
 
-    def get_messages_by_condition(self, condition: Condition, values: List[CodedValues], num_messages)\
-            -> List[IndividualMessage]:
-        messages = []
+    def filter_by_condition(self, condition: Condition, values: List[CodedValues], num_messages):
         if condition is Condition.VALUES:
-            messages = [m for m in self._messages if m.condition is Condition.VALUES and m.coded_value in values]
+            indices = self._messages.Value1.isin(values)
         else:
-            messages = [m for m in self._messages if m.condition is condition]
+            indices = self._messages.ConditionNo == condition
 
-        shuffle(messages)
-        while len(messages) < num_messages:
-            messages = messages + messages
+        sample_size = min(len(self._messages[indices]), num_messages)
+        self._messages = self._messages[indices].sample(sample_size, ignore_index=True)
 
-        return messages[:num_messages]
+        if self._messages.empty:
+            raise Exception('No messages generated.')
+
+        # duplicate the list and append until it's long enough
+        while len(self._messages) < num_messages:
+            diff = num_messages - len(self._messages)
+            self._messages.append(self._messages[:diff], ignore_index=True)
+
+    def print_to_file(self, filename, columns, header=True):
+        self._messages.to_csv(filename, columns=columns, index=False, header=header)
+
+    def add_column(self, column_name, column_data):
+        self._messages[column_name] = column_data
