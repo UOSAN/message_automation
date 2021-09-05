@@ -18,7 +18,6 @@ import threading
 bp = Blueprint('blueprints', __name__)
 
 
-
 def delete_events_threaded(apptoto, participant):
     print_progress('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
@@ -33,6 +32,15 @@ def delete_events_threaded(apptoto, participant):
             print_progress('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
 
         print_progress('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
+
+    except ApptotoError as err:
+        print_progress(str(err))
+
+
+def generate_messages_threaded(event_generator):
+    try:
+        event_generator.generate()
+        event_generator.write_file()
 
     except ApptotoError as err:
         print_progress(str(err))
@@ -73,10 +81,10 @@ def diary_form():
                                 instance_path=current_app.instance_path)
             try:
                 eg.daily_diary()
-            
+
             except ApptotoError as err:
                 flash(str(err), 'danger')
-            
+
             return render_template('daily_diary_form.html')
 
 
@@ -95,20 +103,18 @@ def generation_form():
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
-                part = rc.get_participant(request.form['participant'])
+                participant = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return render_template('generation_form.html')
 
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
+            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=participant,
                                 instance_path=current_app.instance_path)
-            try:
-                eg.generate()
-                f = eg.write_file()
-                return send_file(f, mimetype='text/csv', as_attachment=True)
-            
-            except ApptotoError as err:
-                flash(str(err), 'danger')
+
+            x = threading.Thread(target=generate_messages_threaded, args=(eg,))
+            x.start()
+
+            flash('Message generation started for {}'.format(participant.participant_id))
 
             return render_template('generation_form.html')
 
@@ -123,7 +129,6 @@ def delete_events():
             # Access form properties, get participant information, get events, and delete
             participant_id = request.form['participant']
 
-
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
             try:
@@ -133,11 +138,11 @@ def delete_events():
                 return render_template('delete_form.html')
 
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
-                                      user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-            x = threading.Thread(target = delete_events_threaded, args = (apptoto, participant,))
+                              user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
+            x = threading.Thread(target=delete_events_threaded, args=(apptoto, participant,))
             x.start()
 
-            flash('Message deletion started for {}'.participant.participant_id)
+            flash('Message deletion started for {}'.format(participant.participant_id))
 
             return render_template('delete_form.html')
 
@@ -146,7 +151,7 @@ def delete_events():
 def task():
     if request.method == 'GET':
         return render_template('task_form.html')
- 
+
     elif request.method == 'POST':
         if 'value-task' in request.form:
             error = _validate_participant_id(request.form)
@@ -187,7 +192,7 @@ def participant_responses(participant_id):
 
     try:
         phone_number = rc.get_participant(participant_id).phone_number
-        
+
     except RedcapError as err:
         return make_response((jsonify(str(err)), 404))
 

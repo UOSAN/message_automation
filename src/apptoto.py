@@ -50,12 +50,12 @@ class Apptoto:
         url = f'{self._endpoint}/events'
 
         # Post N events at a time because Apptoto's API can't handle all events at once.
-        # (but how many can it handle?)
-        N = 5
+        # Too many events results in "bad gateway" error
+        N = 25
         for i in range(0, len(events), N):
             events_slice = events[i:i + N]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True}, unpicklable=False)
-            print_progress('Posting {} events to apptoto'.format(len(events_slice)))
+            print_progress('Posting events {} through {} to apptoto'.format(i, len(events_slice)))
 
             while (time.time() - self._last_request_time) < self._request_limit:
                 time.sleep(0.1)    
@@ -71,7 +71,9 @@ class Apptoto:
             if r.status_code == requests.codes.ok:
                 print_progress('Posted events to apptoto')
             else:
-                print_progress(f'Failed to post events {i} through {i+N}, starting at {events[i].start_time}')
+                print_progress('Failed to post events {} through {}, starting at {}'.format(i, len(events_slice),
+                                                                                            events[i].start_time))
+
                 print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
