@@ -40,9 +40,14 @@ def delete_events_threaded(apptoto, participant):
 def generate_messages_threaded(event_generator):
     try:
         event_generator.generate()
-        event_generator.write_file()
+        print_progress('message generation complete')
+        filename = event_generator.write_file()
+        print_progress('wrote file {}'.format(filename))
 
     except ApptotoError as err:
+        print_progress(str(err))
+
+    except Exception as err:
         print_progress(str(err))
 
 

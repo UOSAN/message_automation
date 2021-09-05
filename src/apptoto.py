@@ -77,6 +77,7 @@ class Apptoto:
                 print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
+
        
 
     def get_events(self, begin: datetime, participant:Participant) -> List[int]:
