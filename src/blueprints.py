@@ -4,6 +4,7 @@ from typing import Optional, List
 from flask import (
     Blueprint, current_app, flash, make_response, render_template, request, send_file
 )
+
 from flask.json import jsonify
 from werkzeug.datastructures import ImmutableMultiDict
 
@@ -12,8 +13,7 @@ from src.event_generator import EventGenerator
 from src.redcap import Redcap, RedcapError
 from src.participant import Participant
 from src.progress_log import print_progress
-
-import threading
+from src.executor import executor
 
 bp = Blueprint('blueprints', __name__)
 
@@ -36,6 +36,8 @@ def delete_events_threaded(apptoto, participant):
     except ApptotoError as err:
         print_progress(str(err))
 
+    return 'deletion complete'
+
 
 def generate_messages_threaded(event_generator):
     try:
@@ -49,6 +51,21 @@ def generate_messages_threaded(event_generator):
 
     except Exception as err:
         print_progress(str(err))
+
+    return 'message generation complete'
+
+
+# will need some work, mainly for testing right now
+def done(fn):
+    if fn.cancelled():
+        print_progress('cancelled')
+    elif fn.done():
+        error = fn.exception()
+        if error:
+            print_progress('error returned: {}'.format(error))
+        else:
+            result = fn.result()
+            print_progress(result)
 
 
 def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
@@ -116,8 +133,8 @@ def generation_form():
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=participant,
                                 instance_path=current_app.instance_path)
 
-            x = threading.Thread(target=generate_messages_threaded, args=(eg,))
-            x.start()
+            future_response = executor.submit(generate_messages_threaded, eg)
+            future_response.add_done_callback(done)
 
             flash('Message generation started for {}'.format(participant.participant_id))
 
@@ -144,8 +161,11 @@ def delete_events():
 
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                               user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-            x = threading.Thread(target=delete_events_threaded, args=(apptoto, participant,))
-            x.start()
+            #x = threading.Thread(target=delete_events_threaded, args=(apptoto, participant,))
+            #x.start()
+            future_response = executor.submit(delete_events_threaded, apptoto, participant)
+            future_response.add_done_callback(done)
+
 
             flash('Message deletion started for {}'.format(participant.participant_id))
 
@@ -211,3 +231,11 @@ def participant_responses(participant_id):
         return make_response((jsonify(str(err)), 404))
 
     return make_response(jsonify(conversations), 200)
+
+
+@bp.route('/progress')
+def progress():
+    if not executor.futures.done('generate_messages_threaded'):
+        return jsonify({'status': executor.futures._state('generate_messages_threaded')})
+    future = executor.futures.pop('generate_messages_threaded')
+    return jsonify({'status': done, 'result': future.result()})

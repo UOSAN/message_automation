@@ -55,7 +55,8 @@ class Apptoto:
         for i in range(0, len(events), N):
             events_slice = events[i:i + N]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True}, unpicklable=False)
-            print_progress('Posting events {} through {} to apptoto'.format(i+1, i + len(events_slice)))
+            print_progress('Posting events {} through {} of {} to apptoto'.format(i+1, i + len(events_slice),
+                                                                                  len(events)))
 
             while (time.time() - self._last_request_time) < self._request_limit:
                 time.sleep(0.1)    

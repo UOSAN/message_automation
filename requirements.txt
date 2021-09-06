@@ -3,4 +3,5 @@ jsonpickle
 flask
 Werkzeug
 pandas
+flask-executor
 -r tests/requirements.txt
