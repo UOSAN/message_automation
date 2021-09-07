@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from flask import (
-    Blueprint, current_app, flash, make_response, render_template, request, send_file
+    Blueprint, current_app, flash, make_response, render_template, request, send_file, redirect, url_for
 )
 
 from flask.json import jsonify
@@ -16,6 +16,7 @@ from src.progress_log import print_progress
 from src.executor import executor
 
 bp = Blueprint('blueprints', __name__)
+futurekeys = []
 
 
 def delete_events_threaded(apptoto, participant):
@@ -36,23 +37,25 @@ def delete_events_threaded(apptoto, participant):
     except ApptotoError as err:
         print_progress(str(err))
 
-    return 'deletion complete'
+    return 'Deletion complete'
 
 
 def generate_messages_threaded(event_generator):
     try:
         event_generator.generate()
         print_progress('message generation complete')
-        filename = event_generator.write_file()
-        print_progress('wrote file {}'.format(filename))
 
     except ApptotoError as err:
         print_progress(str(err))
 
+    try:
+        filename = event_generator.write_file()
+        print_progress('wrote file {}'.format(filename))
+    #    send_file(filename, mimetype='text/csv', as_attachment=True)
     except Exception as err:
         print_progress(str(err))
 
-    return 'message generation complete'
+    return 'Message generation complete'
 
 
 # will need some work, mainly for testing right now
@@ -133,12 +136,18 @@ def generation_form():
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=participant,
                                 instance_path=current_app.instance_path)
 
-            future_response = executor.submit(generate_messages_threaded, eg)
-            future_response.add_done_callback(done)
+            key = ('generate {}'.format(participant.participant_id))
+
+            try:
+                future_response = executor.submit_stored(key, generate_messages_threaded, eg)
+                future_response.add_done_callback(done)
+                futurekeys.append(key)
+            except ValueError as err:
+                flash(str(err), 'danger')
 
             flash('Message generation started for {}'.format(participant.participant_id))
 
-            return render_template('generation_form.html')
+            return redirect(url_for('blueprints.generation_form'))
 
 
 @bp.route('/delete', methods=['GET', 'POST'])
@@ -161,15 +170,19 @@ def delete_events():
 
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                               user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-            #x = threading.Thread(target=delete_events_threaded, args=(apptoto, participant,))
-            #x.start()
-            future_response = executor.submit(delete_events_threaded, apptoto, participant)
-            future_response.add_done_callback(done)
 
+            key = ('delete {}'.format(participant.participant_id))
+
+            try:
+                future_response = executor.submit_stored(key, delete_events_threaded, apptoto, participant)
+                future_response.add_done_callback(done)
+                futurekeys.append(key)
+            except ValueError as err:
+                flash(str(err), 'danger')
 
             flash('Message deletion started for {}'.format(participant.participant_id))
 
-            return render_template('delete_form.html')
+            return redirect(url_for('blueprints.delete_events'))
 
 
 @bp.route('/task', methods=['GET', 'POST'])
@@ -235,7 +248,14 @@ def participant_responses(participant_id):
 
 @bp.route('/progress')
 def progress():
-    if not executor.futures.done('generate_messages_threaded'):
-        return jsonify({'status': executor.futures._state('generate_messages_threaded')})
-    future = executor.futures.pop('generate_messages_threaded')
-    return jsonify({'status': done, 'result': future.result()})
+    messages = []
+    for key in futurekeys:
+        messages.append({'action': key, 'status': executor.futures._state(key)})
+
+    finished = [k for k in futurekeys if executor.futures.done(k)]
+
+    for key in finished:
+        executor.futures.pop(key)
+        futurekeys.remove(key)
+
+    return jsonify(messages)

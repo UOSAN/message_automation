@@ -54,13 +54,14 @@ class Apptoto:
         N = 25
         for i in range(0, len(events), N):
             events_slice = events[i:i + N]
-            request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True}, unpicklable=False)
-            print_progress('Posting events {} through {} of {} to apptoto'.format(i+1, i + len(events_slice),
+            request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
+                                             unpicklable=False)
+            print_progress('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
                                                                                   len(events)))
 
             while (time.time() - self._last_request_time) < self._request_limit:
-                time.sleep(0.1)    
-            
+                time.sleep(0.1)
+
             r = requests.post(url=url,
                               data=request_data,
                               headers=self._headers,
@@ -70,16 +71,13 @@ class Apptoto:
             self._last_request_time = time.time()
 
             if r.status_code != requests.codes.ok:
-               # print_progress('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),
-               #                                                                             events[i].start_time))
+                # print_progress('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),
+                #                                                                             events[i].start_time))
 
                 print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
-
-       
-
-    def get_events(self, begin: datetime, participant:Participant) -> List[int]:
+    def get_events(self, begin: datetime, participant: Participant) -> List[int]:
         url = f'{self._endpoint}/events'
 
         event_ids = []
@@ -93,7 +91,7 @@ class Apptoto:
                       'page': page}
 
             while (time.time() - self._last_request_time) < self._request_limit:
-                time.sleep(0.1)    
+                time.sleep(0.1)
 
             r = requests.get(url=url,
                              params=params,
@@ -103,7 +101,6 @@ class Apptoto:
 
             self._last_request_time = time.time()
 
-            
             if r.status_code == requests.codes.ok:
                 events = r.json()['events']
 
@@ -112,11 +109,12 @@ class Apptoto:
                 raise ApptotoError('Failed to get events: {}'.format(r.status_code))
 
             if events:
-                messages = [e['id'] for e in events if not e.get('is_deleted') 
-                    and e.get('calendar_id') == ASH_CALENDAR_ID]
+                messages = [e['id'] for e in events if not e.get('is_deleted')
+                            and e.get('calendar_id') == ASH_CALENDAR_ID]
                 event_ids.extend(messages)
-                print_progress('Found {} messages from {} events for {}'.format(len(messages), 
-                    len(events), participant.participant_id))
+                print_progress('Found {} messages from {} events for {}'.format(len(messages),
+                                                                                len(events),
+                                                                                participant.participant_id))
 
             else:
                 break
@@ -128,9 +126,8 @@ class Apptoto:
         params = {'id': event_id}
 
         while (time.time() - self._last_request_time) < self._request_limit:
-            time.sleep(0.1)    
+            time.sleep(0.1)
 
-        
         r = requests.delete(url=url,
                             params=params,
                             headers=self._headers,
@@ -151,7 +148,7 @@ class Apptoto:
                   'include_conversations': True}
 
         while (time.time() - self._last_request_time) < self._request_limit:
-            time.sleep(0.1)    
+            time.sleep(0.1)
 
         r = requests.get(url=url,
                          params=params,
@@ -167,7 +164,7 @@ class Apptoto:
             for e in response:
                 # Check only events on the right calendar, where there is a conversation
                 if e['calendar_id'] == ASH_CALENDAR_ID and \
-                    e['participants'] and \
+                        e['participants'] and \
                         e['participants'][0]['conversations']:
                     for conversation in e['participants'][0]['conversations']:
                         if conversation['messages']:
