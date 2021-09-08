@@ -6,16 +6,18 @@ from flask import (
 )
 
 from flask.json import jsonify
+#from flask_autoindex import AutoIndex, AutoIndexBlueprint
 from werkzeug.datastructures import ImmutableMultiDict
 
 from src.apptoto import Apptoto, ApptotoError
 from src.event_generator import EventGenerator
 from src.redcap import Redcap, RedcapError
-from src.participant import Participant
 from src.progress_log import print_progress
 from src.executor import executor
 
 bp = Blueprint('blueprints', __name__)
+#auto_bp = Blueprint('auto_bp', __name__)
+#AutoIndexBlueprint(auto_bp, browse_root = '/home/csvfiles')
 futurekeys = []
 
 
@@ -37,8 +39,6 @@ def delete_events_threaded(apptoto, participant):
     except ApptotoError as err:
         print_progress(str(err))
 
-    return 'Deletion complete'
-
 
 def generate_messages_threaded(event_generator):
     try:
@@ -51,11 +51,10 @@ def generate_messages_threaded(event_generator):
     try:
         filename = event_generator.write_file()
         print_progress('wrote file {}'.format(filename))
-    #    send_file(filename, mimetype='text/csv', as_attachment=True)
+
     except Exception as err:
         print_progress(str(err))
 
-    return 'Message generation complete'
 
 
 # will need some work, mainly for testing right now
@@ -246,16 +245,29 @@ def participant_responses(participant_id):
     return make_response(jsonify(conversations), 200)
 
 
-@bp.route('/progress')
+@bp.route('/progress', methods=['GET'])
 def progress():
-    messages = []
-    for key in futurekeys:
-        messages.append({'action': key, 'status': executor.futures._state(key)})
-
+    messages = dict()
     finished = [k for k in futurekeys if executor.futures.done(k)]
 
     for key in finished:
         executor.futures.pop(key)
         futurekeys.remove(key)
+        if executor.exception() is not None:
+            raise executor.exception()
+        elif executor.futures.cancelled(key):
+            messages[key] = 'cancelled'
+        else:
+            messages[key] = 'finished'
 
-    return jsonify(messages)
+    for key in futurekeys:
+        if executor.futures.running(key):
+            messages[key] = "running"
+
+    return make_response(jsonify(messages), 200)
+
+'''
+@bp.route('/downloads')
+def downloads():
+    return current_app.autoindex.render_autoindex()
+'''

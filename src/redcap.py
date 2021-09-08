@@ -74,7 +74,7 @@ class Redcap:
         session = self._get_session1()
         record = _get_record(session, participant_id)
         if record:
-            part.condition = int(record['condition'])
+            part.condition = Condition(int(record['condition']))
 
         return part
 

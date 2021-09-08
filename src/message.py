@@ -18,13 +18,18 @@ class Messages:
     def __getitem__(self, key):
         return self._messages.loc[key].Message
 
+    def __len__(self):
+        return len(self._messages)
+
     def filter_by_condition(self, condition: Condition, values: List[CodedValues], num_messages):
-        if condition is Condition.VALUES:
-            indices = self._messages.Value1.isin(values)
+        if condition is Condition.VALUES and values:
+            vlist = [v.name for v in values]
+            indices = self._messages.Value1.isin(vlist)
         else:
-            indices = self._messages.ConditionNo == condition
+            indices = self._messages.ConditionNo == condition.value
 
         sample_size = min(len(self._messages[indices]), num_messages)
+
         self._messages = self._messages[indices].sample(sample_size, ignore_index=True)
 
         if self._messages.empty:
