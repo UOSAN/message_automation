@@ -233,7 +233,7 @@ def participant_responses(participant_id):
     rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
     try:
-        phone_number = rc.get_participant(participant_id).phone_number
+        participant = rc.get_participant(participant_id)
 
     except RedcapError as err:
         return make_response((jsonify(str(err)), 404))
@@ -242,7 +242,7 @@ def participant_responses(participant_id):
                       user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
 
     try:
-        conversations = apptoto.get_conversations(phone_number=phone_number)
+        conversations = apptoto.get_responses(participant)
     except ApptotoError as err:
         flash(str(err), 'danger')
         return make_response((jsonify(str(err)), 404))
