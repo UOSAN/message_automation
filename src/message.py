@@ -23,8 +23,8 @@ class Messages:
 
     def filter_by_condition(self, condition: Condition, values: List[CodedValues], num_messages):
         if condition is Condition.VALUES and values:
-            vlist = [v.name for v in values]
-            indices = self._messages.Value1.isin(vlist)
+            value_names = [v.name for v in values]
+            indices = self._messages.Value1.isin(value_names)
         else:
             indices = self._messages.ConditionNo == condition.value
 

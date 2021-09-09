@@ -4,12 +4,13 @@ from flask import Flask
 
 from src.executor import executor
 
-from .blueprints import bp
+from .blueprints import bp, auto_bp
+
 
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
-    app.autoindex = AutoIndex(app, browse_root = '/home/csvfiles')
+
     executor.init_app(app)
     app.secret_key = secrets.token_urlsafe(64)
 
@@ -21,6 +22,6 @@ def create_app(test_config=None):
 
     app.config['EXECUTOR_TYPE'] = 'thread'
     app.register_blueprint(bp)
-    app.register_blueprint(auto_bp)
+    app.register_blueprint(auto_bp, url_prefix='/downloads')
 
     return app

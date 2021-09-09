@@ -6,7 +6,7 @@ from flask import (
 )
 
 from flask.json import jsonify
-#from flask_autoindex import AutoIndex, AutoIndexBlueprint
+from flask_autoindex import AutoIndexBlueprint
 from werkzeug.datastructures import ImmutableMultiDict
 
 from src.apptoto import Apptoto, ApptotoError
@@ -14,10 +14,15 @@ from src.event_generator import EventGenerator
 from src.redcap import Redcap, RedcapError
 from src.progress_log import print_progress
 from src.executor import executor
+from pathlib import Path
+
 
 bp = Blueprint('blueprints', __name__)
-#auto_bp = Blueprint('auto_bp', __name__)
-#AutoIndexBlueprint(auto_bp, browse_root = '/home/csvfiles')
+
+csvpath = Path('/home/csvfiles')
+auto_bp = Blueprint('auto_bp', __name__)
+AutoIndexBlueprint(auto_bp, browse_root = csvpath)
+
 futurekeys = []
 
 
@@ -49,15 +54,13 @@ def generate_messages_threaded(event_generator):
         print_progress(str(err))
 
     try:
-        filename = event_generator.write_file()
+        filename = event_generator.write_file(csvpath)
         print_progress('wrote file {}'.format(filename))
 
     except Exception as err:
         print_progress(str(err))
 
 
-
-# will need some work, mainly for testing right now
 def done(fn):
     if fn.cancelled():
         print_progress('cancelled')
@@ -92,14 +95,14 @@ def diary_form():
             if error:
                 for e in error:
                     flash(e, 'danger')
-                return render_template('daily_diary_form.html')
+                return redirect(url_for('blueprints.diary_form'))
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
                 part = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
-                return render_template('daily_diary_form.html')
+                return redirect(url_for('blueprints.diary_form'))
 
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
                                 instance_path=current_app.instance_path)
@@ -109,7 +112,7 @@ def diary_form():
             except ApptotoError as err:
                 flash(str(err), 'danger')
 
-            return render_template('daily_diary_form.html')
+            return redirect(url_for('blueprints.diary_form'))
 
 
 @bp.route('/', methods=['GET', 'POST'])
@@ -123,14 +126,14 @@ def generation_form():
             if error:
                 for e in error:
                     flash(e, 'danger')
-                return render_template('generation_form.html')
+                redirect(url_for('blueprints.generation_form'))
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
                 participant = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
-                return render_template('generation_form.html')
+                redirect(url_for('blueprints.generation_form'))
 
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=participant,
                                 instance_path=current_app.instance_path)
@@ -143,6 +146,7 @@ def generation_form():
                 futurekeys.append(key)
             except ValueError as err:
                 flash(str(err), 'danger')
+                redirect(url_for('blueprints.generation_form'))
 
             flash('Message generation started for {}'.format(participant.participant_id))
 
@@ -165,7 +169,7 @@ def delete_events():
                 participant = rc.get_participant(participant_id)
             except RedcapError as err:
                 flash(str(err), 'danger')
-                return render_template('delete_form.html')
+                return redirect(url_for('blueprints.delete_events'))
 
             apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
                               user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
@@ -178,6 +182,7 @@ def delete_events():
                 futurekeys.append(key)
             except ValueError as err:
                 flash(str(err), 'danger')
+                return redirect(url_for('blueprints.delete_events'))
 
             flash('Message deletion started for {}'.format(participant.participant_id))
 
@@ -195,14 +200,14 @@ def task():
             if error:
                 for e in error:
                     flash(e, 'danger')
-                return render_template('task_form.html')
+                return redirect(url_for('blueprints.task'))
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
                 part = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
-                return render_template('task_form.html')
+                return redirect(url_for('blueprints.task'))
 
             eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
                                 instance_path=current_app.instance_path)
@@ -212,7 +217,7 @@ def task():
 
             except ApptotoError as err:
                 flash(str(err), 'danger')
-                return render_template('task_form.html')
+                return redirect(url_for('blueprints.task'))
 
             return send_file(f, mimetype='text/csv', as_attachment=True)
 
@@ -248,26 +253,30 @@ def participant_responses(participant_id):
 @bp.route('/progress', methods=['GET'])
 def progress():
     messages = dict()
+
     finished = [k for k in futurekeys if executor.futures.done(k)]
 
-    for key in finished:
-        executor.futures.pop(key)
-        futurekeys.remove(key)
-        if executor.exception() is not None:
-            raise executor.exception()
+    for key in futurekeys:
+        if executor.futures.running(key):
+            messages[key] = "running"
         elif executor.futures.cancelled(key):
             messages[key] = 'cancelled'
         else:
             messages[key] = 'finished'
 
-    for key in futurekeys:
-        if executor.futures.running(key):
-            messages[key] = "running"
+    for key in finished:
+        executor.futures.pop(key)
+        futurekeys.remove(key)
 
     return make_response(jsonify(messages), 200)
 
-'''
-@bp.route('/downloads')
-def downloads():
-    return current_app.autoindex.render_autoindex()
-'''
+
+@bp.route('/cleanup', methods=['GET'])
+def cleanup():
+    csvfiles = csvpath.glob('*.csv')
+    for filename in csvfiles:
+        filename.unlink()
+
+    return 'Deleted all csv files in download folder'
+
+

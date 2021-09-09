@@ -1,8 +1,10 @@
+# flask_autoindex requires an older version of werkzeug, which requires an older versoin of flask
+
 requests
 jsonpickle
-flask
-Werkzeug
+flask==1.1.1
+Werkzeug==0.16.1
 pandas
 flask-executor
-flask_autoindex
+Flask-AutoIndex
 -r tests/requirements.txt

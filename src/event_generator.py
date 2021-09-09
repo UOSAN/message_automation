@@ -5,8 +5,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List
 
-import pandas as pd
-
 from src.apptoto import Apptoto
 from src.apptoto_event import ApptotoEvent
 from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
@@ -270,21 +268,19 @@ class EventGenerator:
 
             apptoto.post_events(apptoto_events)
 
-    def write_file(self):
-        f = Path.home() / (self._participant.participant_id + '.csv')
+    def write_file(self, filepath=Path.home()):
+        f = filepath / (self._participant.participant_id + '.csv')
         self._messages.write_to_file(f, columns=['UO_ID', 'Message'])
         return f
 
-    def task_input_file(self):
-        message_df = pd.read_csv(self._path)
-
+    def task_input_file(self, filepath=Path.home()):
         for session in range(1, 3):
             for run in range(1, 5):
-                file_name = Path.home() / f'VAFF_{self._participant.participant_id}_Session{session}_Run{run}.csv'
+                file_name = filepath / f'VAFF_{self._participant.participant_id}_Session{session}_Run{run}.csv'
 
                 messages = Messages(file_name)
                 messages.filter_by_condition(Condition.VALUES, self._participant.task_values, TASK_MESSAGES)
                 messages.add_column('iti', ITI)
-                messages.print_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
+                messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
         return _create_archive(self._participant.participant_id)
