@@ -21,6 +21,7 @@ def create_app(test_config=None):
         app.config.from_mapping(test_config)
 
     app.config['EXECUTOR_TYPE'] = 'thread'
+    app.config['EXECUTOR_PROPAGATE_EXCEPTIONS'] = True
     app.register_blueprint(bp)
     app.register_blueprint(auto_bp, url_prefix='/downloads')
 

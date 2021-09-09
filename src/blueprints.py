@@ -261,8 +261,10 @@ def progress():
             messages[key] = "running"
         elif executor.futures.cancelled(key):
             messages[key] = 'cancelled'
-        else:
+        elif executor.futures.done(key):
             messages[key] = 'finished'
+        else:
+            messages[key] = executor.futures._state(key)
 
     for key in finished:
         executor.futures.pop(key)
@@ -280,3 +282,32 @@ def cleanup():
     return 'Deleted all csv files in download folder'
 
 
+@bp.route('/everything', methods=['GET', 'POST'])
+def everything():
+    if request.method == 'GET':
+        return render_template('everything.html')
+
+    elif request.method == 'POST':
+        if 'generate' in request.form:
+            flash('generate messages')
+            return redirect(url_for('blueprints.everything'))
+
+        elif 'task' in request.form:
+            flash('generate task messages')
+            return redirect(url_for('blueprints.everything'))
+
+        elif 'diary' in request.form:
+            flash('diary')
+            return redirect(url_for('blueprints.everything'))
+
+        elif 'count' in request.form:
+            flash('count things')
+            return redirect(url_for('blueprints.everything'))
+
+        elif 'delete' in request.form:
+            flash('delete messages')
+            return redirect(url_for('blueprints.everything'))
+
+        elif 'download' in request.form:
+            flash('download messages')
+            return redirect(url_for('blueprints.everything'))
