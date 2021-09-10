@@ -10,7 +10,7 @@ from flask_autoindex import AutoIndexBlueprint
 from werkzeug.datastructures import ImmutableMultiDict
 
 from src.apptoto import Apptoto, ApptotoError
-from src.event_generator import EventGenerator
+from src.event_generator import daily_diary, generate_messages, generate_task_files
 from src.redcap import Redcap, RedcapError
 from src.progress_log import print_progress
 from src.executor import executor
@@ -18,9 +18,8 @@ from pathlib import Path
 
 bp = Blueprint('blueprints', __name__)
 
-csvpath = Path('/home/csvfiles')
 auto_bp = Blueprint('auto_bp', __name__)
-AutoIndexBlueprint(auto_bp, browse_root=csvpath)
+AutoIndexBlueprint(auto_bp, browse_root='/home/csvfiles')
 
 futurekeys = []
 
@@ -41,22 +40,6 @@ def delete_events_threaded(apptoto, participant):
         print_progress('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
 
     except ApptotoError as err:
-        print_progress(str(err))
-
-
-def generate_messages_threaded(event_generator):
-    try:
-        event_generator.generate()
-        print_progress('message generation complete')
-
-    except ApptotoError as err:
-        print_progress(str(err))
-
-    try:
-        filename = event_generator.write_file(csvpath)
-        print_progress('wrote file {}'.format(filename))
-
-    except Exception as err:
         print_progress(str(err))
 
 
@@ -98,19 +81,18 @@ def diary_form():
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
-                part = rc.get_participant(request.form['participant'])
+                participant = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.diary_form'))
 
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
-                                instance_path=current_app.instance_path)
             try:
-                eg.daily_diary()
+                daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
             except ApptotoError as err:
                 flash(str(err), 'danger')
 
+            flash('diary messages created')
             return redirect(url_for('blueprints.diary_form'))
 
 
@@ -134,13 +116,13 @@ def generation_form():
                 flash(str(err), 'danger')
                 redirect(url_for('blueprints.generation_form'))
 
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=participant,
-                                instance_path=current_app.instance_path)
-
             key = ('generate {}'.format(participant.participant_id))
 
             try:
-                future_response = executor.submit_stored(key, generate_messages_threaded, eg)
+                future_response = executor.submit_stored(key, generate_messages,
+                                                         config=current_app.config['AUTOMATIONCONFIG'],
+                                                         participant=participant,
+                                                         instance_path=current_app.instance_path)
                 future_response.add_done_callback(done)
                 futurekeys.append(key)
             except ValueError as err:
@@ -203,22 +185,22 @@ def task():
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
-                part = rc.get_participant(request.form['participant'])
+                participant = rc.get_participant(request.form['participant'])
             except RedcapError as err:
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.task'))
 
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
-                                instance_path=current_app.instance_path)
-
             try:
-                f = eg.task_input_file()
+                m = generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
+                                        participant=participant,
+                                        instance_path=current_app.instance_path)
 
             except ApptotoError as err:
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.task'))
 
-            return send_file(f, mimetype='text/csv', as_attachment=True)
+            flash(m)
+            return redirect(url_for('blueprints.task'))
 
 
 @bp.route('/count/<participant_id>', methods=['GET'])
@@ -274,7 +256,8 @@ def progress():
 
 @bp.route('/cleanup', methods=['GET'])
 def cleanup():
-    csvfiles = csvpath.glob('*.csv')
+    csv_path = Path(current_app.config['AUTOMATIONCONFIG']['csvpath'])
+    csvfiles = csv_path.glob('*.csv')
     for filename in csvfiles:
         filename.unlink()
 
