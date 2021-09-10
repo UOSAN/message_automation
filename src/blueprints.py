@@ -16,12 +16,11 @@ from src.progress_log import print_progress
 from src.executor import executor
 from pathlib import Path
 
-
 bp = Blueprint('blueprints', __name__)
 
 csvpath = Path('/home/csvfiles')
 auto_bp = Blueprint('auto_bp', __name__)
-AutoIndexBlueprint(auto_bp, browse_root = csvpath)
+AutoIndexBlueprint(auto_bp, browse_root=csvpath)
 
 futurekeys = []
 
@@ -29,7 +28,7 @@ futurekeys = []
 def delete_events_threaded(apptoto, participant):
     print_progress('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
-    event_ids = apptoto.get_events(begin=begin, participant=participant)
+    event_ids = apptoto.get_messages(begin=begin, participant=participant)
     print_progress('Found {} messages total'.format(len(event_ids)))
 
     deleted = 0
@@ -252,25 +251,25 @@ def participant_responses(participant_id):
 
 @bp.route('/progress', methods=['GET'])
 def progress():
-    messages = dict()
-
+    messages = []
     finished = [k for k in futurekeys if executor.futures.done(k)]
 
     for key in futurekeys:
         if executor.futures.running(key):
-            messages[key] = "running"
-        elif executor.futures.cancelled(key):
-            messages[key] = 'cancelled'
+            messages.append('{} running'.format(key))
         elif executor.futures.done(key):
-            messages[key] = 'finished'
-        else:
-            messages[key] = executor.futures._state(key)
+            if executor.futures.cancelled(key):
+                messages.append('{} cancelled'.format(key))
+            else:
+                messages.append('{} finished'.format(key))
+            if executor.futures.exception(key):
+                messages.append('{} error: {}'.format(key, executor.futures.exception(key)))
 
     for key in finished:
         executor.futures.pop(key)
         futurekeys.remove(key)
 
-    return make_response(jsonify(messages), 200)
+    return render_template('progress.html', messages=messages)
 
 
 @bp.route('/cleanup', methods=['GET'])
