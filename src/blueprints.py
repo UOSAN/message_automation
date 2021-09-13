@@ -260,12 +260,12 @@ def cleanup():
         return render_template('cleanup_form.html')
     elif request.method == 'POST':
         if 'submit' in request.form:
-        csv_path = Path(DOWNLOAD_DIR)
-        csvfiles = csv_path.glob('*.csv')
-        for filename in csvfiles:
-            filename.unlink()
+            csv_path = Path(DOWNLOAD_DIR)
+            csvfiles = csv_path.glob('*.csv')
+            for filename in csvfiles:
+                filename.unlink()
 
-        flash('Deleted all csv files in download folder')
+            flash('Deleted all csv files in download folder')
         return redirect(url_for('blueprints.cleanup'))
 
 @bp.route('/everything', methods=['GET', 'POST'])
