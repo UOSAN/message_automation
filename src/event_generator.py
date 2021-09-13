@@ -1,5 +1,4 @@
 import random
-import zipfile
 from collections import namedtuple
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +10,7 @@ from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition
 from src.participant import Participant
 from src.message import Messages
+from src.constants import DOWNLOAD_DIR
 
 SMS_TITLE = 'ASH SMS'
 CIGS_TITLE = 'ASH CIGS'
@@ -241,7 +241,7 @@ def generate_messages(config, participant, instance_path):
 
         apptoto.post_events(apptoto_events)
 
-    csv_path = Path(config['csvpath'])
+    csv_path = Path(DOWNLOAD_DIR)
     f = csv_path / (participant.participant_id + '.csv')
     messages.write_to_file(f, columns=['UO_ID', 'Message'])
     return f
@@ -249,13 +249,13 @@ def generate_messages(config, participant, instance_path):
 
 def generate_task_files(config, participant, instance_path):
     message_file = Path(instance_path) / config['message_file']
-    csv_path = Path(config['csvpath'])
+    csv_path = Path(DOWNLOAD_DIR)
     for session in range(1, 3):
         for run in range(1, 5):
             messages = Messages(message_file)
             messages.filter_by_condition(Condition.VALUES, participant.task_values, TASK_MESSAGES)
             messages.add_column('iti', ITI)
-            file_name = csv_path / f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
+            file_name = csv_path/ f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
             messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
     return "task files created"

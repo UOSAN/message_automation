@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional, List
+from pathlib import Path
 
 from flask import (
-    Blueprint, current_app, flash, make_response, render_template, request, send_file, redirect, url_for
+    Blueprint, current_app, flash, make_response, render_template, request, redirect, url_for
 )
 
 from flask.json import jsonify
@@ -14,12 +15,17 @@ from src.event_generator import daily_diary, generate_messages, generate_task_fi
 from src.redcap import Redcap, RedcapError
 from src.progress_log import print_progress
 from src.executor import executor
-from pathlib import Path
+from src.constants import DOWNLOAD_DIR
 
 bp = Blueprint('blueprints', __name__)
 
 auto_bp = Blueprint('auto_bp', __name__)
-AutoIndexBlueprint(auto_bp, browse_root='/home/csvfiles')
+
+if not Path(DOWNLOAD_DIR).exists():
+    Path(DOWNLOAD_DIR).mkdir()
+
+AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
+
 
 futurekeys = []
 
@@ -254,7 +260,7 @@ def cleanup():
         return render_template('cleanup_form.html')
     elif request.method == 'POST':
         if 'submit' in request.form:
-        csv_path = Path(current_app.config['AUTOMATIONCONFIG']['csvpath'])
+        csv_path = Path(DOWNLOAD_DIR)
         csvfiles = csv_path.glob('*.csv')
         for filename in csvfiles:
             filename.unlink()

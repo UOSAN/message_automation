@@ -5,8 +5,6 @@ import requests
 from src.enums import Condition, CodedValues
 from src.participant import Participant
 
-import json
-
 
 class RedcapError(Exception):
     def __init__(self, message):
