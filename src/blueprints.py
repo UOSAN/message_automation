@@ -28,19 +28,13 @@ def delete_events_threaded(apptoto, participant):
     print_progress('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
     event_ids = apptoto.get_messages(begin=begin, participant=participant)
-    print_progress('Found {} messages total'.format(len(event_ids)))
-
     deleted = 0
-    try:
-        for event_id in event_ids:
-            apptoto.delete_event(event_id)
-            deleted += 1
-            print_progress('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
+    for event_id in event_ids:
+        apptoto.delete_event(event_id)
+        deleted += 1
+        print_progress('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
 
-        print_progress('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
-
-    except ApptotoError as err:
-        print_progress(str(err))
+    print_progress('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
 
 
 def done(fn):
@@ -254,15 +248,19 @@ def progress():
     return render_template('progress.html', messages=messages)
 
 
-@bp.route('/cleanup', methods=['GET'])
+@bp.route('/cleanup', methods=['GET', 'POST'])
 def cleanup():
-    csv_path = Path(current_app.config['AUTOMATIONCONFIG']['csvpath'])
-    csvfiles = csv_path.glob('*.csv')
-    for filename in csvfiles:
-        filename.unlink()
+    if request.method == 'GET':
+        return render_template('cleanup_form.html')
+    elif request.method == 'POST':
+        if 'submit' in request.form:
+        csv_path = Path(current_app.config['AUTOMATIONCONFIG']['csvpath'])
+        csvfiles = csv_path.glob('*.csv')
+        for filename in csvfiles:
+            filename.unlink()
 
-    return 'Deleted all csv files in download folder'
-
+        flash('Deleted all csv files in download folder')
+        return redirect(url_for('blueprints.cleanup'))
 
 @bp.route('/everything', methods=['GET', 'POST'])
 def everything():

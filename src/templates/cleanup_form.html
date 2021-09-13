@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" id="upload">
+  <h2 class="subtitle is-4">Remove all files from download folder</h2>
+
+ {% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<ul class=flashes>
+  {% for category, message in messages %}
+  <li class="tag is-{{ category }}">{{ message }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endwith %}
+
+  <div class="columns">
+    <div class="column is-one-fifth">
+      <input name="submit" class="button is-link" id="submit" type="submit" value="Delete csv files">
+    </div>
+  </div>
+</form>
+
+
+{% endblock %}
