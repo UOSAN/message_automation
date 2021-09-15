@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
+from collections import deque
 
 from flask import (
     Blueprint, current_app, flash, make_response, render_template, request, redirect, url_for
@@ -26,9 +27,9 @@ if not Path(DOWNLOAD_DIR).exists():
 
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 
-futurekeys = []
-# todo replace with ring buffer
-done_messages = []
+future_keys = []
+
+done_messages = deque(maxlen=20)
 
 
 def delete_events_threaded(apptoto, participant):
@@ -126,7 +127,7 @@ def generation_form():
                                                          participant=participant,
                                                          instance_path=current_app.instance_path)
                 future_response.add_done_callback(done)
-                futurekeys.append(key)
+                future_keys.append(key)
             except ValueError as err:
                 flash(str(err), 'danger')
                 redirect(url_for('blueprints.generation_form'))
@@ -162,7 +163,7 @@ def delete_events():
             try:
                 future_response = executor.submit_stored(key, delete_events_threaded, apptoto, participant)
                 future_response.add_done_callback(done)
-                futurekeys.append(key)
+                future_keys.append(key)
             except ValueError as err:
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.delete_events'))
@@ -236,9 +237,9 @@ def participant_responses(participant_id):
 @bp.route('/progress', methods=['GET'])
 def progress():
     messages = list(done_messages)
-    finished = [k for k in futurekeys if executor.futures.done(k)]
+    finished = [k for k in future_keys if executor.futures.done(k)]
 
-    for key in futurekeys:
+    for key in future_keys:
         if executor.futures.running(key):
             msg = '{} running'.format(key)
             messages.append(msg)
@@ -255,7 +256,7 @@ def progress():
 
     for key in finished:
         executor.futures.pop(key)
-        futurekeys.remove(key)
+        future_keys.remove(key)
 
     return render_template('progress.html', messages=messages)
 
