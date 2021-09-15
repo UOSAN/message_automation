@@ -139,7 +139,7 @@ class Apptoto:
             writer.writeheader()
             for event in events:
                 if event['id'] in messages:
-                    writer.writerow(event.__dict__)
+                    writer.writerow(event)
 
         return messages
 
