@@ -36,7 +36,7 @@ class Apptoto:
         self._api_token = api_token
         self._user = user
         self._headers = {'Content-Type': 'application/json'}
-        self._timeout = 120
+        self._timeout = 240
 
         # seconds between requests for apptoto burst rate limit, 100 requests per minute
         self._request_limit = 0.6
@@ -128,8 +128,9 @@ class Apptoto:
         print_progress('Found {} messages from {} events for {}'.format(len(messages),
                                                                         len(events),
                                                                         participant.participant_id))
-        # I want to make sure the deleted events match the posted events,
-        # numbers don't match right now
+
+        # added for debugging
+        '''
         csv_path = Path(DOWNLOAD_DIR)
         events_file = csv_path / (participant.participant_id + '_events.csv')
         with open(events_file, 'w') as ef:
@@ -140,6 +141,7 @@ class Apptoto:
             for event in events:
                 if event['id'] in messages:
                     writer.writerow(event)
+        '''
 
         return messages
 

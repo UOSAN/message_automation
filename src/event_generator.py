@@ -246,7 +246,8 @@ def generate_messages(config, participant, instance_path):
         f = csv_path / (participant.participant_id + '.csv')
         messages.write_to_file(f, columns=['UO_ID', 'Message'])
 
-        # also write events
+        # also write events for debugging
+        '''
         events_file = csv_path / (participant.participant_id + '_events.csv')
         with open(events_file, 'w') as ef:
             fieldnames = ['title', 'start_time', 'content']
@@ -255,6 +256,7 @@ def generate_messages(config, participant, instance_path):
             writer.writeheader()
             for event in apptoto_events:
                 writer.writerow(event.__dict__)
+        '''
 
     return
 

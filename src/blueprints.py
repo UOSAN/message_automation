@@ -234,13 +234,13 @@ def participant_responses(participant_id):
 
 @bp.route('/progress', methods=['GET'])
 def progress():
-    messages = done_messages
+    messages = list(done_messages)
     finished = [k for k in futurekeys if executor.futures.done(k)]
 
     for key in futurekeys:
         if executor.futures.running(key):
             msg = '{} running'.format(key)
-            messages = messages + [msg]
+            messages.append(msg)
         elif executor.futures.done(key):
             if executor.futures.exception(key):
                 msg = '{} error: {}'.format(key, executor.futures.exception(key))
@@ -249,7 +249,7 @@ def progress():
             else:
                 msg = '{} finished'.format(key)
 
-            messages = messages + [msg]
+            messages.append(msg)
             done_messages.append(msg)
 
     for key in finished:
