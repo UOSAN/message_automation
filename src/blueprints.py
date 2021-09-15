@@ -26,8 +26,9 @@ if not Path(DOWNLOAD_DIR).exists():
 
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 
-
 futurekeys = []
+# todo replace with ring buffer
+done_messages = []
 
 
 def delete_events_threaded(apptoto, participant):
@@ -233,19 +234,25 @@ def participant_responses(participant_id):
 
 @bp.route('/progress', methods=['GET'])
 def progress():
-    messages = []
+    messages = done_messages
     finished = [k for k in futurekeys if executor.futures.done(k)]
 
     for key in futurekeys:
         if executor.futures.running(key):
-            messages.append('{} running'.format(key))
+            msg = '{} running'.format(key)
+            messages += [msg]
         elif executor.futures.done(key):
             if executor.futures.cancelled(key):
-                messages.append('{} cancelled'.format(key))
+                msg = '{} cancelled'.format(key)
             else:
-                messages.append('{} finished'.format(key))
+                msg = '{} finished'.format(key)
+            messages += [msg]
+            done_messages.append(msg)
+
             if executor.futures.exception(key):
-                messages.append('{} error: {}'.format(key, executor.futures.exception(key)))
+                msg = '{} error: {}'.format(key, executor.futures.exception(key))
+                messages += [msg]
+                done_messages.append(msg)
 
     for key in finished:
         executor.futures.pop(key)
@@ -267,6 +274,7 @@ def cleanup():
 
             flash('Deleted all csv files in download folder')
         return redirect(url_for('blueprints.cleanup'))
+
 
 @bp.route('/everything', methods=['GET', 'POST'])
 def everything():

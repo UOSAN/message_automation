@@ -38,7 +38,7 @@ class Messages:
             diff = num_messages - len(self._messages)
             self._messages.append(self._messages[:diff], ignore_index=True)
 
-    def write_to_file(self, filename, columns, header=True):
+    def write_to_file(self, filename, columns=None, header=True):
         self._messages.to_csv(filename, columns=columns, index=False, header=header)
 
     def add_column(self, column_name, column_data):

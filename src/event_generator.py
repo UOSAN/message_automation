@@ -1,3 +1,4 @@
+import csv
 import random
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -241,10 +242,21 @@ def generate_messages(config, participant, instance_path):
 
         apptoto.post_events(apptoto_events)
 
-    csv_path = Path(DOWNLOAD_DIR)
-    f = csv_path / (participant.participant_id + '.csv')
-    messages.write_to_file(f, columns=['UO_ID', 'Message'])
-    return f
+        csv_path = Path(DOWNLOAD_DIR)
+        f = csv_path / (participant.participant_id + '.csv')
+        messages.write_to_file(f, columns=['UO_ID', 'Message'])
+
+        # also write events
+        events_file = csv_path / (participant.participant_id + '_events.csv')
+        with open(events_file, 'w') as ef:
+            fieldnames = ['title', 'start_time', 'content']
+            writer = csv.DictWriter(ef, fieldnames=fieldnames,
+                                    extrasaction='ignore')
+            writer.writeheader()
+            for event in apptoto_events:
+                writer.writerow(event.__dict__)
+
+    return
 
 
 def generate_task_files(config, participant, instance_path):
@@ -255,7 +267,7 @@ def generate_task_files(config, participant, instance_path):
             messages = Messages(message_file)
             messages.filter_by_condition(Condition.VALUES, participant.task_values, TASK_MESSAGES)
             messages.add_column('iti', ITI)
-            file_name = csv_path/ f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
+            file_name = csv_path / f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
             messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
     return "task files created"

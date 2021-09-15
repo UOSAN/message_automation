@@ -1,13 +1,15 @@
 from datetime import datetime
 import time
 from typing import List, Tuple
+from pathlib import Path
+import csv
 
 import jsonpickle
 import requests
 from requests.auth import HTTPBasicAuth
 
 from src.apptoto_event import ApptotoEvent
-from src.constants import MAX_EVENTS, ASH_CALENDAR_ID
+from src.constants import MAX_EVENTS, ASH_CALENDAR_ID, DOWNLOAD_DIR
 from src.progress_log import print_progress
 from src.participant import Participant
 
@@ -126,6 +128,17 @@ class Apptoto:
         print_progress('Found {} messages from {} events for {}'.format(len(messages),
                                                                         len(events),
                                                                         participant.participant_id))
+        # I want to make sure the deleted events match the posted events,
+        # numbers don't match right now
+        csv_path = Path(DOWNLOAD_DIR)
+        events_file = csv_path / (participant.participant_id + '_events.csv')
+        with open(events_file, 'w') as ef:
+            fieldnames = ['title', 'start_time', 'content']
+            writer = csv.DictWriter(ef, fieldnames=fieldnames,
+                                    extrasaction='ignore')
+            writer.writeheader()
+            for event in events if e['id'] in messages:
+                    writer.writerow(event.__dict__)
 
         return messages
 
