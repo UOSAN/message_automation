@@ -240,19 +240,17 @@ def progress():
     for key in futurekeys:
         if executor.futures.running(key):
             msg = '{} running'.format(key)
-            messages += [msg]
+            messages = messages + [msg]
         elif executor.futures.done(key):
-            if executor.futures.cancelled(key):
+            if executor.futures.exception(key):
+                msg = '{} error: {}'.format(key, executor.futures.exception(key))
+            elif executor.futures.cancelled(key):
                 msg = '{} cancelled'.format(key)
             else:
                 msg = '{} finished'.format(key)
-            messages += [msg]
-            done_messages.append(msg)
 
-            if executor.futures.exception(key):
-                msg = '{} error: {}'.format(key, executor.futures.exception(key))
-                messages += [msg]
-                done_messages.append(msg)
+            messages = messages + [msg]
+            done_messages.append(msg)
 
     for key in finished:
         executor.futures.pop(key)
