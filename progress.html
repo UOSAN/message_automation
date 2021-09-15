@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Progress</title>
+</head>
+<body>
+    <div class="container"></div>
+    <script>
+      const jsonfile = JSON.parse({{jsonfile|tojson}});
+      console.log(jsonfile);
+      document.querySelector(".container").innerHTML = JSON.stringify(jsonfile, null, 2);
+    </script>
+</body>
+</html>
