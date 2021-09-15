@@ -53,7 +53,8 @@ def done(fn):
             print_progress('error returned: {}'.format(error))
         else:
             result = fn.result()
-            print_progress(result)
+            if result:
+                print_progress(result)
 
 
 def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
