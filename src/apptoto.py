@@ -137,7 +137,8 @@ class Apptoto:
             writer = csv.DictWriter(ef, fieldnames=fieldnames,
                                     extrasaction='ignore')
             writer.writeheader()
-            for event in events if e['id'] in messages:
+            for event in events:
+                if event['id'] in messages:
                     writer.writerow(event.__dict__)
 
         return messages
