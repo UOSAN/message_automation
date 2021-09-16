@@ -29,7 +29,7 @@ AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 
 future_keys = []
 
-done_messages = deque(maxlen=20)
+done_messages = deque(maxlen=200)
 
 
 def delete_events_threaded(apptoto, participant):
@@ -94,6 +94,7 @@ def diary_form():
 
             except ApptotoError as err:
                 flash(str(err), 'danger')
+                return redirect(url_for('blueprints.diary_form'))
 
             flash('diary messages created')
             return redirect(url_for('blueprints.diary_form'))
@@ -110,14 +111,14 @@ def generation_form():
             if error:
                 for e in error:
                     flash(e, 'danger')
-                redirect(url_for('blueprints.generation_form'))
+                return redirect(url_for('blueprints.generation_form'))
 
             rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
             try:
                 participant = rc.get_participant(request.form['participant'])
-            except RedcapError as err:
+            except Exception as err:
                 flash(str(err), 'danger')
-                redirect(url_for('blueprints.generation_form'))
+                return redirect(url_for('blueprints.generation_form'))
 
             key = ('generate {}'.format(participant.participant_id))
 
@@ -128,9 +129,9 @@ def generation_form():
                                                          instance_path=current_app.instance_path)
                 future_response.add_done_callback(done)
                 future_keys.append(key)
-            except ValueError as err:
+            except Exception as err:
                 flash(str(err), 'danger')
-                redirect(url_for('blueprints.generation_form'))
+                return redirect(url_for('blueprints.generation_form'))
 
             flash('Message generation started for {}'.format(participant.participant_id))
 

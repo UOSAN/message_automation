@@ -78,7 +78,7 @@ class Apptoto:
                 print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
-    def get_all_events(self, begin: datetime, participant: Participant, include_conversations=False):
+    def _get_all_events(self, begin: datetime, participant: Participant, include_conversations=False):
         url = f'{self._endpoint}/events'
 
         events = []
@@ -121,7 +121,7 @@ class Apptoto:
 
     def get_messages(self, begin: datetime, participant: Participant) -> List[int]:
 
-        events = self.get_all_events(begin, participant)
+        events = self._get_all_events(begin, participant)
         messages = [e['id'] for e in events if not e.get('is_deleted')
                     and e.get('calendar_id') == ASH_CALENDAR_ID]
 
@@ -167,7 +167,7 @@ class Apptoto:
         """Get timestamp and content of participant's responses."""
 
         begin = datetime(year=2021, month=4, day=1)
-        events = self.get_all_events(begin, participant, include_conversations=True)
+        events = self._get_all_events(begin, participant, include_conversations=True)
 
         # Check only events on the right calendar, where there is a conversation
         conversation_events = [e for e in events if e['calendar_id'] == ASH_CALENDAR_ID and
