@@ -1,17 +1,19 @@
 from datetime import datetime
 import time
 from typing import List, Tuple
-from pathlib import Path
-import csv
+import logging.config
 
 import jsonpickle
 import requests
 from requests.auth import HTTPBasicAuth
 
 from src.apptoto_event import ApptotoEvent
-from src.constants import MAX_EVENTS, ASH_CALENDAR_ID, DOWNLOAD_DIR
-from src.progress_log import print_progress
+from src.constants import MAX_EVENTS, ASH_CALENDAR_ID
+from src.logging import DEFAULT_LOGGING
 from src.participant import Participant
+
+logging.config.dictConfig(DEFAULT_LOGGING)
+logger = logging.getLogger(__name__)
 
 
 class ApptotoError(Exception):
@@ -57,7 +59,7 @@ class Apptoto:
             events_slice = events[i:i + N]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
                                              unpicklable=False)
-            print_progress('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
+            logger.info('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
                                                                                   len(events)))
 
             while (time.time() - self._last_request_time) < self._request_limit:
@@ -72,10 +74,10 @@ class Apptoto:
             self._last_request_time = time.time()
 
             if r.status_code != requests.codes.ok:
-                # print_progress('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),
+                # logger.info('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),
                 #                                                                             events[i].start_time))
 
-                print_progress(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
+                logger.info(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
     def _get_all_events(self, begin: datetime, participant: Participant, include_conversations=False):
@@ -107,12 +109,12 @@ class Apptoto:
                 new_events = r.json()['events']
 
             else:
-                print_progress(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
+                logger.info(f'Failed to get events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to get events: {}'.format(r.status_code))
 
             if new_events:
                 events.extend(new_events)
-                print_progress('Found {} events for {}'.format(len(events),
+                logger.info('Found {} events for {}'.format(len(events),
                                                                participant.participant_id))
             else:
                 break
@@ -125,7 +127,7 @@ class Apptoto:
         messages = [e['id'] for e in events if not e.get('is_deleted')
                     and e.get('calendar_id') == ASH_CALENDAR_ID]
 
-        print_progress('Found {} messages from {} events for {}'.format(len(messages),
+        logger.info('Found {} messages from {} events for {}'.format(len(messages),
                                                                         len(events),
                                                                         participant.participant_id))
 

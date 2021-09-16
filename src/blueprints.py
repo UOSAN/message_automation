@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
 from collections import deque
+import logging.config
 
 from flask import (
     Blueprint, current_app, flash, make_response, render_template, request, redirect, url_for
@@ -11,51 +12,47 @@ from flask.json import jsonify
 from flask_autoindex import AutoIndexBlueprint
 from werkzeug.datastructures import ImmutableMultiDict
 
-from src.apptoto import Apptoto, ApptotoError
+from src.apptoto import Apptoto
 from src.event_generator import daily_diary, generate_messages, generate_task_files
 from src.redcap import Redcap, RedcapError
-from src.progress_log import print_progress
+from src.logging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
 
 bp = Blueprint('blueprints', __name__)
-
 auto_bp = Blueprint('auto_bp', __name__)
-
 if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
-
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
-
 future_keys = []
-
 done_messages = deque(maxlen=200)
+logging.config.dictConfig(DEFAULT_LOGGING)
+logger = logging.getLogger(__name__)
 
 
 def delete_events_threaded(apptoto, participant):
-    print_progress('Deletion started for {}'.format(participant.participant_id))
+    logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
     event_ids = apptoto.get_messages(begin=begin, participant=participant)
     deleted = 0
     for event_id in event_ids:
         apptoto.delete_event(event_id)
         deleted += 1
-        print_progress('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
-
-    print_progress('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
+        logger.info('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
+    logger.info('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
 
 
 def done(fn):
     if fn.cancelled():
-        print_progress('cancelled')
+        logger.info('cancelled')
     elif fn.done():
         error = fn.exception()
         if error:
-            print_progress('error returned: {}'.format(error))
+            logger.info('error returned: {}'.format(error))
         else:
             result = fn.result()
             if result:
-                print_progress(result)
+                logger.info(result)
 
 
 def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
@@ -92,7 +89,7 @@ def diary_form():
             try:
                 daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
-            except ApptotoError as err:
+            except Exception as err:
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.diary_form'))
 
@@ -199,7 +196,7 @@ def task():
                                         participant=participant,
                                         instance_path=current_app.instance_path)
 
-            except ApptotoError as err:
+            except Exception as err:
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.task'))
 
@@ -228,7 +225,7 @@ def participant_responses(participant_id):
 
     try:
         conversations = apptoto.get_responses(participant)
-    except ApptotoError as err:
+    except Exception as err:
         flash(str(err), 'danger')
         return make_response((jsonify(str(err)), 404))
 

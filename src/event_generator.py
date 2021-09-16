@@ -1,4 +1,3 @@
-import csv
 import random
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -245,18 +244,6 @@ def generate_messages(config, participant, instance_path):
         csv_path = Path(DOWNLOAD_DIR)
         f = csv_path / (participant.participant_id + '.csv')
         messages.write_to_file(f, columns=['UO_ID', 'Message'])
-
-        # also write events for debugging
-        '''
-        events_file = csv_path / (participant.participant_id + '_events.csv')
-        with open(events_file, 'w') as ef:
-            fieldnames = ['title', 'start_time', 'content']
-            writer = csv.DictWriter(ef, fieldnames=fieldnames,
-                                    extrasaction='ignore')
-            writer.writeheader()
-            for event in apptoto_events:
-                writer.writerow(event.__dict__)
-        '''
 
     return
 
