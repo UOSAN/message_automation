@@ -52,15 +52,15 @@ class Apptoto:
         """
         url = f'{self._endpoint}/events'
 
-        # Post N events at a time because Apptoto's API can't handle all events at once.
+        # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
-        N = 25
-        for i in range(0, len(events), N):
-            events_slice = events[i:i + N]
+        num_events = 25
+        for i in range(0, len(events), num_events):
+            events_slice = events[i:i + num_events]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
                                              unpicklable=False)
             logger.info('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
-                                                                                  len(events)))
+                                                                               len(events)))
 
             while (time.time() - self._last_request_time) < self._request_limit:
                 time.sleep(0.1)
@@ -80,7 +80,8 @@ class Apptoto:
                 logger.info(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
-    def _get_all_events(self, begin: datetime, participant: Participant, include_conversations=False):
+    def _get_all_events(self, begin: datetime, participant: Participant, include_conversations=False,
+                        include_deleted=False):
         url = f'{self._endpoint}/events'
 
         events = []
@@ -92,7 +93,8 @@ class Apptoto:
                       'phone_number': participant.phone_number,
                       'include_conversations': include_conversations,
                       'page_size': MAX_EVENTS,
-                      'page': page}
+                      'page': page,
+                      'include_deleted': include_deleted}
 
             while (time.time() - self._last_request_time) < self._request_limit:
                 time.sleep(0.1)
@@ -115,7 +117,7 @@ class Apptoto:
             if new_events:
                 events.extend(new_events)
                 logger.info('Found {} events for {}'.format(len(events),
-                                                               participant.participant_id))
+                                                            participant.participant_id))
             else:
                 break
 
@@ -128,8 +130,8 @@ class Apptoto:
                     and e.get('calendar_id') == ASH_CALENDAR_ID]
 
         logger.info('Found {} messages from {} events for {}'.format(len(messages),
-                                                                        len(events),
-                                                                        participant.participant_id))
+                                                                     len(events),
+                                                                     participant.participant_id))
 
         # added for debugging
         '''
@@ -186,3 +188,55 @@ class Apptoto:
                         responses.append((message['at'], message['content']))
 
         return responses
+
+    def _get_one_event(self, id):
+        url = f'{self._endpoint}/event'
+
+        params = {'id': id,
+                  'include_conversations': True}
+
+        r = requests.get(url=url,
+                         params=params,
+                         headers=self._headers,
+                         timeout=self._timeout,
+                         auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        if r.status_code == requests.codes.ok:
+            return r.json()
+
+    def _get_some_events(self, **kwargs):
+
+        url = f'{self._endpoint}/events'
+
+        events = []
+        page = 0
+
+        kwargs['page_size'] = MAX_EVENTS
+        while True:
+            page += 1
+            kwargs['page'] = page
+
+            while (time.time() - self._last_request_time) < self._request_limit:
+                time.sleep(0.1)
+
+            r = requests.get(url=url,
+                             params=kwargs,
+                             headers=self._headers,
+                             timeout=self._timeout,
+                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+            self._last_request_time = time.time()
+
+            if r.status_code == requests.codes.ok:
+                new_events = r.json()['events']
+
+            else:
+                raise ApptotoError('Failed to get events: {}'.format(r.status_code))
+
+            if new_events:
+                events.extend(new_events)
+
+            else:
+                break
+
+        return events
