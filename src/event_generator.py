@@ -307,7 +307,7 @@ def get_responses(config, participant) -> List[Tuple[str, str]]:
     return responses
 
 
-def delete_events(config, participant):
+def delete_messages(config, participant):
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
     logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()

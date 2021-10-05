@@ -142,9 +142,9 @@ def delete_events():
             key = ('delete {}'.format(participant.participant_id))
 
             try:
-                future_response = executor.submit_stored(key, eg.delete_events,
+                future_response = executor.submit_stored(key, eg.delete_messages,
                                                          config=current_app.config['AUTOMATIONCONFIG'],
-                                                         particpant=participant)
+                                                         participant=participant)
                 future_response.add_done_callback(done)
                 future_keys.append(key)
             except ValueError as err:
