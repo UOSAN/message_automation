@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
 from collections import deque
@@ -12,8 +11,7 @@ from flask.json import jsonify
 from flask_autoindex import AutoIndexBlueprint
 from werkzeug.datastructures import ImmutableMultiDict
 
-from src.apptoto import Apptoto
-from src.event_generator import daily_diary, generate_messages, generate_task_files
+import src.event_generator as eg
 from src.redcap import Redcap, RedcapError
 from src.logging import DEFAULT_LOGGING
 from src.executor import executor
@@ -28,18 +26,6 @@ future_keys = []
 done_messages = deque(maxlen=200)
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
-
-
-def delete_events_threaded(apptoto, participant):
-    logger.info('Deletion started for {}'.format(participant.participant_id))
-    begin = datetime.now()
-    event_ids = apptoto.get_messages(begin=begin, participant=participant)
-    deleted = 0
-    for event_id in event_ids:
-        apptoto.delete_event(event_id)
-        deleted += 1
-        logger.info('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
-    logger.info('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
 
 
 def done(fn):
@@ -87,7 +73,7 @@ def diary_form():
                 return redirect(url_for('blueprints.diary_form'))
 
             try:
-                daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
+                eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
             except Exception as err:
                 flash(str(err), 'danger')
@@ -120,7 +106,7 @@ def generation_form():
             key = ('generate {}'.format(participant.participant_id))
 
             try:
-                future_response = executor.submit_stored(key, generate_messages,
+                future_response = executor.submit_stored(key, eg.generate_messages,
                                                          config=current_app.config['AUTOMATIONCONFIG'],
                                                          participant=participant,
                                                          instance_path=current_app.instance_path)
@@ -153,13 +139,12 @@ def delete_events():
                 flash(str(err), 'danger')
                 return redirect(url_for('blueprints.delete_events'))
 
-            apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
-                              user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-
             key = ('delete {}'.format(participant.participant_id))
 
             try:
-                future_response = executor.submit_stored(key, delete_events_threaded, apptoto, participant)
+                future_response = executor.submit_stored(key, eg.delete_events,
+                                                         config=current_app.config['AUTOMATIONCONFIG'],
+                                                         particpant=participant)
                 future_response.add_done_callback(done)
                 future_keys.append(key)
             except ValueError as err:
@@ -192,9 +177,9 @@ def task():
                 return redirect(url_for('blueprints.task'))
 
             try:
-                m = generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
-                                        participant=participant,
-                                        instance_path=current_app.instance_path)
+                m = eg.generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
+                                           participant=participant,
+                                           instance_path=current_app.instance_path)
 
             except Exception as err:
                 flash(str(err), 'danger')
@@ -220,11 +205,8 @@ def participant_responses(participant_id):
     except RedcapError as err:
         return make_response((jsonify(str(err)), 404))
 
-    apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
-                      user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-
     try:
-        conversations = apptoto.get_responses(participant)
+        conversations = eg.get_responses(config=current_app.config, participant=participant)
     except Exception as err:
         flash(str(err), 'danger')
         return make_response((jsonify(str(err)), 404))

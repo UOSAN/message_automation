@@ -2,15 +2,19 @@ import random
 from collections import namedtuple
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
+import logging.config
 
-from src.apptoto import Apptoto
-from src.apptoto_event import ApptotoEvent
+from src.logging import DEFAULT_LOGGING
+from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant
 from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition
 from src.participant import Participant
 from src.message import Messages
-from src.constants import DOWNLOAD_DIR
+from src.constants import DOWNLOAD_DIR, ASH_CALENDAR_ID
+
+logging.config.dictConfig(DEFAULT_LOGGING)
+logger = logging.getLogger(__name__)
 
 SMS_TITLE = 'ASH SMS'
 CIGS_TITLE = 'ASH CIGS'
@@ -101,6 +105,7 @@ def daily_diary(config: Dict[str, str], participant: Participant):
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
 
     first_day = participant.daily_diary_time()
+    participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
 
     events = []
     for day in range(0, 4):
@@ -112,7 +117,7 @@ def daily_diary(config: Dict[str, str], participant: Participant):
                                    start_time=t,
                                    end_time=t,
                                    content=content,
-                                   participants=[participant]))
+                                   participants=participants))
 
     # Add quit_message_date date boosters
     s = datetime.strptime(f'{participant.quit_date} {participant.wake_time}', '%Y-%m-%d %H:%M')
@@ -124,7 +129,7 @@ def daily_diary(config: Dict[str, str], participant: Participant):
                                start_time=quit_message_date,
                                end_time=quit_message_date,
                                content=content,
-                               participants=[participant]))
+                               participants=participants))
 
     quit_message_date = quit_message_date - timedelta(days=1)
     content = 'UO: Day Before'
@@ -134,7 +139,7 @@ def daily_diary(config: Dict[str, str], participant: Participant):
                                start_time=quit_message_date,
                                end_time=quit_message_date,
                                content=content,
-                               participants=[participant]))
+                               participants=participants))
 
     if len(events) > 0:
         apptoto.post_events(events)
@@ -148,6 +153,8 @@ def generate_messages(config, participant, instance_path):
     """
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
+
+    participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
 
     events = []
     message_file = Path(instance_path) / config['message_file']
@@ -237,7 +244,7 @@ def generate_messages(config, participant, instance_path):
                                                start_time=e.time,
                                                end_time=e.time,
                                                content=e.content,
-                                               participants=[participant]))
+                                               participants=participants))
 
         apptoto.post_events(apptoto_events)
 
@@ -260,3 +267,54 @@ def generate_task_files(config, participant, instance_path):
             messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
     return "task files created"
+
+
+def get_messages(config, begin: datetime, participant: Participant) -> List[int]:
+    apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
+    events = apptoto.get_events(begin=begin.isoformat(), phone_number=participant.phone_number)
+    messages = [e['id'] for e in events if not e.get('is_deleted')
+                and e.get('calendar_id') == ASH_CALENDAR_ID]
+
+    logger.info('Found {} messages from {} events for {}'.format(len(messages),
+                                                                 len(events),
+                                                                 participant.participant_id))
+
+    return messages
+
+
+def get_responses(config, participant) -> List[Tuple[str, str]]:
+    """Get timestamp and content of participant's responses."""
+    apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
+    begin = datetime(year=2021, month=4, day=1)
+    events = apptoto.get_events(begin=begin.isoformat(),
+                                phone_number=participant.phone_number,
+                                include_conversations=True)
+
+    # Check only events on the right calendar, where there is a conversation
+    conversation_events = [e for e in events if e['calendar_id'] == ASH_CALENDAR_ID and
+                           e['participants'] and e['participants'][0]['conversations']]
+
+    responses = []
+    for event in conversation_events:
+        conversations = [c for c in event['participants'][0]['conversations'] if c['messages']]
+        for conversation in conversations:
+            for message in conversation['messages']:
+                # for each replied event get the content and the time.
+                # Content should be the participant's response.
+                if 'replied' in message['event_type']:
+                    responses.append((message['at'], message['content']))
+
+    return responses
+
+
+def delete_events(config, participant):
+    apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
+    logger.info('Deletion started for {}'.format(participant.participant_id))
+    begin = datetime.now()
+    event_ids = get_messages(config=config, begin=begin, participant=participant)
+    deleted = 0
+    for event_id in event_ids:
+        apptoto.delete_event(event_id)
+        deleted += 1
+        logger.info('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
+    logger.info('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
