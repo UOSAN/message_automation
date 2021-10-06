@@ -206,7 +206,7 @@ def participant_responses(participant_id):
         return make_response((jsonify(str(err)), 404))
 
     try:
-        conversations = eg.get_responses(config=current_app.config, participant=participant)
+        conversations = eg.get_conversations(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
     except Exception as err:
         flash(str(err), 'danger')
         return make_response((jsonify(str(err)), 404))

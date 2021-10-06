@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple
 import logging.config
+import pandas as pd
 
 from src.logging import DEFAULT_LOGGING
 from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant
@@ -269,49 +270,46 @@ def generate_task_files(config, participant, instance_path):
     return "task files created"
 
 
-def get_messages(config, begin: datetime, participant: Participant) -> List[int]:
-    apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
-    events = apptoto.get_events(begin=begin.isoformat(), phone_number=participant.phone_number)
-    messages = [e['id'] for e in events if not e.get('is_deleted')
-                and e.get('calendar_id') == ASH_CALENDAR_ID]
-
-    logger.info('Found {} messages from {} events for {}'.format(len(messages),
-                                                                 len(events),
-                                                                 participant.participant_id))
-
-    return messages
-
-
-def get_responses(config, participant) -> List[Tuple[str, str]]:
-    """Get timestamp and content of participant's responses."""
+def get_conversations(config, participant, instance_path):
+    """Get timestamp and content of all message to and from participant."""
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
     begin = datetime(year=2021, month=4, day=1)
     events = apptoto.get_events(begin=begin.isoformat(),
                                 phone_number=participant.phone_number,
                                 include_conversations=True)
 
-    # Check only events on the right calendar, where there is a conversation
-    conversation_events = [e for e in events if e['calendar_id'] == ASH_CALENDAR_ID and
-                           e['participants'] and e['participants'][0]['conversations']]
+    conversations = pd.json_normalize(events, record_path=['participants', 'conversations', 'messages'],
+                                      meta=['title', 'calendar_id'])
 
-    responses = []
-    for event in conversation_events:
-        conversations = [c for c in event['participants'][0]['conversations'] if c['messages']]
-        for conversation in conversations:
-            for message in conversation['messages']:
-                # for each replied event get the content and the time.
-                # Content should be the participant's response.
-                if 'replied' in message['event_type']:
-                    responses.append((message['at'], message['content']))
+    conversations = conversations[conversations.calendar_id == ASH_CALENDAR_ID]
+    conversations['timestamp'] = pd.to_datetime(conversations['at'])
+    message_file = Path(instance_path) / config['message_file']
+    messages = pd.read_csv(message_file, dtype=str)
+    messages['content'] = 'UO: ' + messages.Message
 
-    return responses
+
+    conversations = pd.merge(conversations, messages, on='content', how='left')
+
+    csv_path = Path(DOWNLOAD_DIR)
+    file_name = csv_path / f'{participant.participant_id}_conversations.csv'
+
+    conversations.to_csv(file_name, index=False, date_format='%x %X',
+                         columns=['timestamp', 'title', 'event_type', 'content', 'UO_ID'])
 
 
 def delete_messages(config, participant):
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
     logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
-    event_ids = get_messages(config=config, begin=begin, participant=participant)
+
+    events = apptoto.get_events(begin=begin.isoformat(), phone_number=participant.phone_number)
+    event_ids = [e['id'] for e in events if not e.get('is_deleted')
+                 and e.get('calendar_id') == ASH_CALENDAR_ID]
+
+    logger.info('Found {} messages from {} events for {}'.format(len(event_ids),
+                                                                 len(events),
+                                                                 participant.participant_id))
+
     deleted = 0
     for event_id in event_ids:
         apptoto.delete_event(event_id)

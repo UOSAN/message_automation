@@ -6,6 +6,14 @@ DEFAULT_LOGGING = {
             'level': 'INFO',
             'handlers': ['rotating_file']
         },
+        'console': {
+            'level': 'INFO',
+            'handlers': ['console']
+        },
+        'src.apptoto': {
+            'level': 'INFO',
+            'handlers': ['console']
+        },
     },
     'handlers': {
         'console': {

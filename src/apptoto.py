@@ -164,23 +164,22 @@ class Apptoto:
             page += 1
             kwargs['page'] = page
 
-            while (time.time() - self._last_request_time) < self._request_limit:
-                time.sleep(0.1)
+            r = None
+            attempts = 0
 
-            r = requests.get(url=url,
-                             params=kwargs,
-                             headers=self._headers,
-                             timeout=self._timeout,
-                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+            while not r and attempts < 5:
+                while (time.time() - self._last_request_time) < self._request_limit:
+                    time.sleep(0.1)
 
-            print(url)
-            print(kwargs)
-            print(self._headers)
-            print(self._timeout)
-            print(self._user)
-            print(self._api_token)
+                r = requests.get(url=url,
+                                 params=kwargs,
+                                 headers=self._headers,
+                                 timeout=self._timeout,
+                                 auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
-            self._last_request_time = time.time()
+                self._last_request_time = time.time()
+                attempts = attempts + 1
+                print(attempts)
 
             if r.status_code == requests.codes.ok:
                 new_events = r.json()['events']
