@@ -83,7 +83,7 @@ def diary_form():
             return redirect(url_for('blueprints.diary_form'))
 
 
-@bp.route('/', methods=['GET', 'POST'])
+@bp.route('/generate', methods=['GET', 'POST'])
 def generation_form():
     if request.method == 'GET':
         return render_template('generation_form.html')
@@ -256,10 +256,10 @@ def cleanup():
         return redirect(url_for('blueprints.cleanup'))
 
 
-@bp.route('/everything', methods=['GET', 'POST'])
-def everything():
+@bp.route('/', methods=['GET', 'POST'])
+def message_automation():
     if request.method == 'GET':
-        return render_template('everything.html')
+        return render_template('main_page.html')
 
     elif request.method == 'POST':
         if 'generate' in request.form:
