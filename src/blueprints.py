@@ -52,6 +52,30 @@ def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str
         return None
 
 
+def diary(particpant_id):
+        error = _validate_participant_id(request.form)
+        if error:
+            for e in error:
+                flash(e, 'danger')
+            return redirect(url_for('blueprints.diary_form'))
+
+        rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+        try:
+            participant = rc.get_participant(request.form['participant'])
+        except RedcapError as err:
+            flash(str(err), 'danger')
+            return redirect(url_for('blueprints.diary_form'))
+
+        try:
+            eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
+
+        except Exception as err:
+            flash(str(err), 'danger')
+            return redirect(url_for('blueprints.diary_form'))
+
+        flash('diary messages created')
+        return redirect(url_for('blueprints.diary_form'))
+
 @bp.route('/diary', methods=['GET', 'POST'])
 def diary_form():
     if request.method == 'GET':
@@ -256,32 +280,84 @@ def cleanup():
         return redirect(url_for('blueprints.cleanup'))
 
 
+# this worked, can't figure out why it won't work now
+@bp.route('/everything', methods=['GET', 'POST'])
+def everything():
+    if request.method == 'GET':
+        return render_template('everything.html')
+
+    elif request.method == 'POST':
+        if 'download' in request.form:
+            flash('download')
+            return redirect(url_for('blueprints.cleanup'))
+
+        elif 'messages' in request.form:
+            flash('generate messages')
+            return redirect(url_for('blueprints.cleanup'))
+
+        elif 'task' in request.form:
+            flash('generate task messages')
+            return redirect(url_for('blueprints.cleanup'))
+
+        elif 'diary' in request.form:
+            flash('diary')
+            return redirect(url_for('blueprints.cleanup'))
+
+        elif 'conversations' in request.form:
+            flash('count things')
+            return redirect(url_for('blueprints.cleanup'))
+
+        elif 'delete' in request.form:
+            flash('delete messages')
+            return redirect(url_for('blueprints.everything'))
+
+
 @bp.route('/', methods=['GET', 'POST'])
 def message_automation():
     if request.method == 'GET':
         return render_template('main_page.html')
 
     elif request.method == 'POST':
-        if 'generate' in request.form:
+        if 'download' in request.form:
+            return redirect('/downloads')
+
+        # everything else uses the participant id
+
+        error = _validate_participant_id(request.form)
+        if error:
+            for e in error:
+                flash(e, 'danger')
+            return redirect(url_for('blueprints.message_automation'))
+
+        rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+        try:
+            participant = rc.get_participant(request.form['participant'])
+        except RedcapError as err:
+            flash(str(err), 'danger')
+            return redirect(url_for('blueprints.message_automation'))
+
+        if 'messages' in request.form:
             flash('generate messages')
-            return redirect(url_for('blueprints.everything'))
+            return redirect(url_for('blueprints.message_automation'))
 
-        elif 'task' in request.form:
+        if 'task' in request.form:
             flash('generate task messages')
-            return redirect(url_for('blueprints.everything'))
+            return redirect(url_for('blueprints.message_automation'))
 
-        elif 'diary' in request.form:
+        if 'diary' in request.form:
             flash('diary')
-            return redirect(url_for('blueprints.everything'))
+            return redirect(url_for('blueprints.message_automation'))
 
-        elif 'count' in request.form:
+        if 'conversations' in request.form:
             flash('count things')
-            return redirect(url_for('blueprints.everything'))
+            return redirect(url_for('blueprints.message_automation'))
 
-        elif 'delete' in request.form:
+        if 'delete' in request.form:
             flash('delete messages')
-            return redirect(url_for('blueprints.everything'))
+            return redirect(url_for('blueprints.message_automation'))
+        
 
-        elif 'download' in request.form:
-            flash('download messages')
-            return redirect(url_for('blueprints.everything'))
+        
+
+
+
