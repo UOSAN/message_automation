@@ -23,7 +23,7 @@ if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 future_keys = []
-done_messages = deque(maxlen=200)
+status_messages = deque(maxlen=200)
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
 
@@ -53,28 +53,29 @@ def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str
 
 
 def diary(particpant_id):
-        error = _validate_participant_id(request.form)
-        if error:
-            for e in error:
-                flash(e, 'danger')
-            return redirect(url_for('blueprints.diary_form'))
-
-        rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-        try:
-            participant = rc.get_participant(request.form['participant'])
-        except RedcapError as err:
-            flash(str(err), 'danger')
-            return redirect(url_for('blueprints.diary_form'))
-
-        try:
-            eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
-
-        except Exception as err:
-            flash(str(err), 'danger')
-            return redirect(url_for('blueprints.diary_form'))
-
-        flash('diary messages created')
+    error = _validate_participant_id(request.form)
+    if error:
+        for e in error:
+            flash(e, 'danger')
         return redirect(url_for('blueprints.diary_form'))
+
+    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    try:
+        participant = rc.get_participant(request.form['participant'])
+    except RedcapError as err:
+        flash(str(err), 'danger')
+        return redirect(url_for('blueprints.diary_form'))
+
+    try:
+        eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
+
+    except Exception as err:
+        flash(str(err), 'danger')
+        return redirect(url_for('blueprints.diary_form'))
+
+    flash('diary messages created')
+    return redirect(url_for('blueprints.diary_form'))
+
 
 @bp.route('/diary', methods=['GET', 'POST'])
 def diary_form():
@@ -240,7 +241,7 @@ def participant_responses(participant_id):
 
 @bp.route('/progress', methods=['GET'])
 def progress():
-    messages = list(done_messages)
+    messages = list(status_messages)
     finished = [k for k in future_keys if executor.futures.done(k)]
 
     for key in future_keys:
@@ -256,7 +257,7 @@ def progress():
                 msg = '{} finished'.format(key)
 
             messages.append(msg)
-            done_messages.append(msg)
+            status_messages.append(msg)
 
     for key in finished:
         executor.futures.pop(key)
@@ -280,39 +281,27 @@ def cleanup():
         return redirect(url_for('blueprints.cleanup'))
 
 
-# this worked, can't figure out why it won't work now
-@bp.route('/everything', methods=['GET', 'POST'])
-def everything():
-    if request.method == 'GET':
-        return render_template('everything.html')
-
-    elif request.method == 'POST':
-        if 'download' in request.form:
-            flash('download')
-            return redirect(url_for('blueprints.cleanup'))
-
-        elif 'messages' in request.form:
-            flash('generate messages')
-            return redirect(url_for('blueprints.cleanup'))
-
-        elif 'task' in request.form:
-            flash('generate task messages')
-            return redirect(url_for('blueprints.cleanup'))
-
-        elif 'diary' in request.form:
-            flash('diary')
-            return redirect(url_for('blueprints.cleanup'))
-
-        elif 'conversations' in request.form:
-            flash('count things')
-            return redirect(url_for('blueprints.cleanup'))
-
-        elif 'delete' in request.form:
-            flash('delete messages')
-            return redirect(url_for('blueprints.everything'))
+@bp.route('/')
+def index():
+    return render_template('index.html')
 
 
-@bp.route('/', methods=['GET', 'POST'])
+@bp.route('/action1', methods=["POST"])
+def action1():
+    participant_id = request.form['participant']
+    global status_messages
+    status_messages.append('action 1 {}'.format(participant_id))
+    return 'action 1'
+
+
+@bp.route('/action2', methods=['POST'])
+def action2():
+    global status_messages
+    status_messages.append('action 2')
+    return 'action 2'
+
+
+@bp.route('/testall', methods=['GET', 'POST'])
 def message_automation():
     if request.method == 'GET':
         return render_template('main_page.html')
@@ -355,9 +344,3 @@ def message_automation():
         if 'delete' in request.form:
             flash('delete messages')
             return redirect(url_for('blueprints.message_automation'))
-        
-
-        
-
-
-
