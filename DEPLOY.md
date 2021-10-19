@@ -10,7 +10,7 @@ Install the Azure command line interface tools:
 ```
 brew install azure-cli
 ```
-Then log in to azure on the command line:
+Then log in to azure on the command line: (use the login info of the lab DuckID account)
 ```
 az login
 ```
