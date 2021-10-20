@@ -69,8 +69,20 @@
     });
 </script>
 
+<script>
+    function addSubmit(ev) {
+      ev.preventDefault();
+      var request = new XMLHttpRequest();
+      request.addEventListener('load', addShow);
+      request.open('POST', {{ url_for('add')|tojson }});
+      request.send(new FormData(this));
+    }
+</script>
+
+
 <!--  disable enter key -->
 <script src="http://code.jquery.com/jquery-3.1.1.js"></script>
+<!--
 <script type="text/javascript">
 $(document).keypress(
   function(event){
@@ -79,6 +91,7 @@ $(document).keypress(
     }
 });
 </script>
+-->
 
 <!--  periodically refresh progress log  -->
 <script type="text/javascript">

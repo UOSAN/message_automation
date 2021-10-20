@@ -285,6 +285,11 @@ def cleanup():
 def index():
     return render_template('index.html')
 
+@bp.route('/validate', methods=['POST'])
+def validate():
+    participant_id = request.form['participant']
+    print(participant_id)
+    return participant_id
 
 @bp.route('/action1', methods=["POST"])
 def action1():
