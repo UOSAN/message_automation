@@ -26,7 +26,7 @@
         </form>
 
         <br><br>
-        <button id="action1" class="button is-link" >ACTION 1</button>
+        <button id="validate" class="button is-link" >Validate ID</button>
         <br><br>
         <button id="action2" class="button is-link" >ACTION 2</button>
         <br><br>
@@ -68,30 +68,37 @@
         });
     });
 </script>
-
-<script>
-    function addSubmit(ev) {
-      ev.preventDefault();
-      var request = new XMLHttpRequest();
-      request.addEventListener('load', addShow);
-      request.open('POST', {{ url_for('add')|tojson }});
-      request.send(new FormData(this));
-    }
-</script>
-
-
-<!--  disable enter key -->
-<script src="http://code.jquery.com/jquery-3.1.1.js"></script>
 <!--
+<script type="text/javascript">
+document.addEventListener('keypress', function (e) {
+        if (e.keyCode === 13 || e.which === 13) {
+            e.preventDefault();
+            const request = new XMLHttpRequest();
+            request.open('POST', {{ url_for('blueprints.validate') }} );
+            request.onload = () => {
+                document.getElementById('progress').contentWindow.location.reload(true);
+            };
+            const form = document.getElementById( "upload" );
+            const formdata = new FormData(form);
+            request.send(formdata);
+        }
+
+    });
+</script>
+-->
+<script src="http://code.jquery.com/jquery-3.1.1.js"></script>
+<!--  disable enter key -->
+
 <script type="text/javascript">
 $(document).keypress(
   function(event){
     if (event.which == '13') {
-      event.preventDefault();
+        event.preventDefault();
+        document.getElementById('validate').click();
     }
 });
 </script>
--->
+
 
 <!--  periodically refresh progress log  -->
 <script type="text/javascript">
@@ -102,5 +109,14 @@ $(document).keypress(
         setInterval(doRefresh, 10000);
     });
 </script>
-
+        <!--
+        const request = new XMLHttpRequest();
+        request.open('POST', {{ url_for('blueprints.validate') }} );
+        request.onload = () => {
+            document.getElementById('progress').contentWindow.location.reload(true);
+        };
+        const form = document.getElementById( "upload" );
+        const formdata = new FormData(form);
+        request.send(formdata);
+        -->
 </html>

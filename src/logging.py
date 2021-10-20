@@ -4,7 +4,7 @@ DEFAULT_LOGGING = {
     'loggers': {
         '': {
             'level': 'INFO',
-            'handlers': ['rotating_file']
+            'handlers': ['rotating_file'],
         },
         'console': {
             'level': 'INFO',

@@ -22,8 +22,12 @@ auto_bp = Blueprint('auto_bp', __name__)
 if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
+
+# this has evolved into the main way to show messages for the user.
+# Could possibly replace/merge with logging
 future_keys = []
 status_messages = deque(maxlen=200)
+
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
 
@@ -285,11 +289,16 @@ def cleanup():
 def index():
     return render_template('index.html')
 
+
 @bp.route('/validate', methods=['POST'])
 def validate():
     participant_id = request.form['participant']
-    print(participant_id)
+    if len(participant_id) != 6 or not participant_id.startswith('ASH'):
+        status_messages.append(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
+    else:
+        status_messages.append(f'{participant_id} is valid')
     return participant_id
+
 
 @bp.route('/action1', methods=["POST"])
 def action1():
