@@ -56,60 +56,24 @@ def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str
         return None
 
 
-def diary(particpant_id):
-    error = _validate_participant_id(request.form)
-    if error:
-        for e in error:
-            flash(e, 'danger')
-        return redirect(url_for('blueprints.diary_form'))
-
+@bp.route('/diary', methods=['POST'])
+def diary():
     rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
     try:
         participant = rc.get_participant(request.form['participant'])
     except RedcapError as err:
         flash(str(err), 'danger')
-        return redirect(url_for('blueprints.diary_form'))
+        return str(err)
 
     try:
         eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
         flash(str(err), 'danger')
-        return redirect(url_for('blueprints.diary_form'))
+        return str(err)
 
-    flash('diary messages created')
-    return redirect(url_for('blueprints.diary_form'))
-
-
-@bp.route('/diary', methods=['GET', 'POST'])
-def diary_form():
-    if request.method == 'GET':
-        return render_template('daily_diary_form.html')
-    elif request.method == 'POST':
-        if 'submit' in request.form:
-            # Access form properties and do stuff
-            error = _validate_participant_id(request.form)
-            if error:
-                for e in error:
-                    flash(e, 'danger')
-                return redirect(url_for('blueprints.diary_form'))
-
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-            try:
-                participant = rc.get_participant(request.form['participant'])
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.diary_form'))
-
-            try:
-                eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
-
-            except Exception as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.diary_form'))
-
-            flash('diary messages created')
-            return redirect(url_for('blueprints.diary_form'))
+    status_messages.append(f'diary messages created for {participant.participant_id}')
+    return 'success'
 
 
 @bp.route('/generate', methods=['GET', 'POST'])
@@ -185,37 +149,26 @@ def delete_events():
             return redirect(url_for('blueprints.delete_events'))
 
 
-@bp.route('/task', methods=['GET', 'POST'])
+@bp.route('/task', methods=['POST'])
 def task():
-    if request.method == 'GET':
-        return render_template('task_form.html')
+    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    try:
+        participant = rc.get_participant(request.form['participant'])
+    except RedcapError as err:
+        flash(str(err), 'danger')
+        return str(err)
 
-    elif request.method == 'POST':
-        if 'value-task' in request.form:
-            error = _validate_participant_id(request.form)
-            if error:
-                for e in error:
-                    flash(e, 'danger')
-                return redirect(url_for('blueprints.task'))
+    try:
+        m = eg.generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
+                                   participant=participant,
+                                   instance_path=current_app.instance_path)
 
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-            try:
-                participant = rc.get_participant(request.form['participant'])
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.task'))
+    except Exception as err:
+        flash(str(err), 'danger')
+        return str(err)
 
-            try:
-                m = eg.generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
-                                           participant=participant,
-                                           instance_path=current_app.instance_path)
-
-            except Exception as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.task'))
-
-            flash(m)
-            return redirect(url_for('blueprints.task'))
+    status_messages.append(m)
+    return m
 
 
 @bp.route('/count/<participant_id>', methods=['GET'])

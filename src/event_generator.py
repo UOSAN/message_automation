@@ -267,7 +267,7 @@ def generate_task_files(config, participant, instance_path):
             file_name = csv_path / f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
             messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
-    return "task files created"
+    return f'task files created for {participant.participant_id}'
 
 
 def get_conversations(config, participant, instance_path):
