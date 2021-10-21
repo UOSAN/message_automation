@@ -30,6 +30,9 @@ class ApptotoParticipant:
         self.phone = phone
         self.email = email
 
+    def __str__(self):
+        return '{} {} {}'.format(self.name, self.phone, self.email)
+
 
 class ApptotoEvent:
     def __init__(self, calendar: str, title: str, start_time: datetime, end_time: datetime,
@@ -54,6 +57,10 @@ class ApptotoEvent:
         self.content = content
 
         self.participants = participants
+
+    def __str__(self):
+        return '{} {} {} {} {} {}'.format(self.calendar, self.title, self.participants, self.start_time,
+                                          self.end_time, self.content)
 
 
 class ApptotoError(Exception):
