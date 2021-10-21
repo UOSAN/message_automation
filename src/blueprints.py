@@ -62,91 +62,76 @@ def diary():
     try:
         participant = rc.get_participant(request.form['participant'])
     except RedcapError as err:
-        flash(str(err), 'danger')
+        status_messages.append(str(err))
         return str(err)
 
     try:
         eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
-        flash(str(err), 'danger')
+        status_messages.append(str(err))
         return str(err)
 
-    status_messages.append(f'diary messages created for {participant.participant_id}')
+    status_messages.append(f'Diary messages created for {participant.participant_id}')
     return 'success'
 
 
-@bp.route('/generate', methods=['GET', 'POST'])
-def generation_form():
-    if request.method == 'GET':
-        return render_template('generation_form.html')
-    elif request.method == 'POST':
-        if 'submit' in request.form:
-            # Access form properties and do stuff
-            error = _validate_participant_id(request.form)
-            if error:
-                for e in error:
-                    flash(e, 'danger')
-                return redirect(url_for('blueprints.generation_form'))
+@bp.route('/messages', methods=['POST'])
+def generate_messages():
+    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    try:
+        participant = rc.get_participant(request.form['participant'])
+    except Exception as err:
+        status_messages.append(str(err))
+        return str(err)
 
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-            try:
-                participant = rc.get_participant(request.form['participant'])
-            except Exception as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.generation_form'))
+    key = ('generate {}'.format(participant.participant_id))
 
-            key = ('generate {}'.format(participant.participant_id))
+    try:
+        future_response = executor.submit_stored(key, eg.generate_messages,
+                                                 config=current_app.config['AUTOMATIONCONFIG'],
+                                                 participant=participant,
+                                                 instance_path=current_app.instance_path)
+        future_response.add_done_callback(done)
+        future_keys.append(key)
+    except Exception as err:
+        status_messages.append(str(err))
+        return str(err)
 
-            try:
-                future_response = executor.submit_stored(key, eg.generate_messages,
-                                                         config=current_app.config['AUTOMATIONCONFIG'],
-                                                         participant=participant,
-                                                         instance_path=current_app.instance_path)
-                future_response.add_done_callback(done)
-                future_keys.append(key)
-            except Exception as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.generation_form'))
-
-            flash('Message generation started for {}'.format(participant.participant_id))
-
-            return redirect(url_for('blueprints.generation_form'))
+    status = f'Message generation started for {participant.participant_id}'
+    status_messages.append(status)
+    return status
 
 
 @bp.route('/delete', methods=['GET', 'POST'])
 def delete_events():
-    if request.method == 'GET':
-        return render_template('delete_form.html')
+    # Access form properties, get participant information, get events, and delete
+    participant_id = request.form['participant']
 
-    elif request.method == 'POST':
-        if 'submit' in request.form:
-            # Access form properties, get participant information, get events, and delete
-            participant_id = request.form['participant']
+    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    try:
+        participant = rc.get_participant(participant_id)
+    except RedcapError as err:
+        status_messages.append(str(err))
+        return str(err)
 
-            try:
-                participant = rc.get_participant(participant_id)
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.delete_events'))
+    key = ('delete {}'.format(participant.participant_id))
 
-            key = ('delete {}'.format(participant.participant_id))
+    try:
+        future_response = executor.submit_stored(key, eg.delete_messages,
+                                                 config=current_app.config['AUTOMATIONCONFIG'],
+                                                 participant=participant)
+        future_response.add_done_callback(done)
+        future_keys.append(key)
+    except ValueError as err:
+        status_messages.append(str(err))
+        return str(err)
 
-            try:
-                future_response = executor.submit_stored(key, eg.delete_messages,
-                                                         config=current_app.config['AUTOMATIONCONFIG'],
-                                                         participant=participant)
-                future_response.add_done_callback(done)
-                future_keys.append(key)
-            except ValueError as err:
-                flash(str(err), 'danger')
-                return redirect(url_for('blueprints.delete_events'))
+    status = f'Message deletion started for {participant.participant_id}'
+    status_messages.append(status)
 
-            flash('Message deletion started for {}'.format(participant.participant_id))
-
-            return redirect(url_for('blueprints.delete_events'))
+    return status
 
 
 @bp.route('/task', methods=['POST'])

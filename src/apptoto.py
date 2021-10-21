@@ -153,7 +153,6 @@ class Apptoto:
             return r.json()
 
     def get_events(self, **kwargs):
-
         url = f'{self._endpoint}/events'
 
         events = []

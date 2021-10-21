@@ -14,6 +14,10 @@ DEFAULT_LOGGING = {
             'level': 'INFO',
             'handlers': ['console']
         },
+        'src.event_generator': {
+            'level': 'INFO',
+            'handlers': ['console']
+        },
     },
     'handlers': {
         'console': {

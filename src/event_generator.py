@@ -298,6 +298,7 @@ def get_conversations(config, participant, instance_path):
 
 
 def delete_messages(config, participant):
+    print('you are here')
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
     logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
