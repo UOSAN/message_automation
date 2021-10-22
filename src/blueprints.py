@@ -16,6 +16,7 @@ from src.redcap import Redcap, RedcapError
 from src.logging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
+from src.participant import Participant
 
 bp = Blueprint('blueprints', __name__)
 auto_bp = Blueprint('auto_bp', __name__)
@@ -140,7 +141,7 @@ def task():
     try:
         participant = rc.get_participant(request.form['participant'])
     except RedcapError as err:
-        flash(str(err), 'danger')
+        status_messages.append(str(err))
         return str(err)
 
     try:
@@ -149,7 +150,7 @@ def task():
                                    instance_path=current_app.instance_path)
 
     except Exception as err:
-        flash(str(err), 'danger')
+        status_messages.append(str(err))
         return str(err)
 
     status_messages.append(m)
@@ -180,6 +181,11 @@ def participant_responses(participant_id):
 
     return make_response(jsonify(conversations), 200)
 
+@bp.route('/responses', methods=['POST'])
+def responses():
+    participant_id = validate()
+    status_messages.append(participant_id)
+    return participant_id
 
 @bp.route('/progress', methods=['GET'])
 def progress():
@@ -227,7 +233,7 @@ def cleanup():
 def index():
     return render_template('index.html')
 
-
+import jsons
 @bp.route('/validate', methods=['POST'])
 def validate():
     participant_id = request.form['participant']
@@ -235,64 +241,19 @@ def validate():
         status_messages.append(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
     else:
         status_messages.append(f'{participant_id} is valid')
+
+    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    try:
+        participant = rc.get_participant(participant_id)
+    except RedcapError as err:
+        status_messages.append(str(err))
+        return str(err)
+
+    status_messages.append(participant)
+
+    status_messages.append(jsons.dumps(participant))
+    part2 = jsons.load(jsons.dump(participant, Participant))
+    status_messages.append(part2)
+    status_messages.append(jsons.dumps(part2))
     return participant_id
 
-
-@bp.route('/action1', methods=["POST"])
-def action1():
-    participant_id = request.form['participant']
-    global status_messages
-    status_messages.append('action 1 {}'.format(participant_id))
-    return 'action 1'
-
-
-@bp.route('/action2', methods=['POST'])
-def action2():
-    global status_messages
-    status_messages.append('action 2')
-    return 'action 2'
-
-
-@bp.route('/testall', methods=['GET', 'POST'])
-def message_automation():
-    if request.method == 'GET':
-        return render_template('main_page.html')
-
-    elif request.method == 'POST':
-        if 'download' in request.form:
-            return redirect('/downloads')
-
-        # everything else uses the participant id
-
-        error = _validate_participant_id(request.form)
-        if error:
-            for e in error:
-                flash(e, 'danger')
-            return redirect(url_for('blueprints.message_automation'))
-
-        rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-        try:
-            participant = rc.get_participant(request.form['participant'])
-        except RedcapError as err:
-            flash(str(err), 'danger')
-            return redirect(url_for('blueprints.message_automation'))
-
-        if 'messages' in request.form:
-            flash('generate messages')
-            return redirect(url_for('blueprints.message_automation'))
-
-        if 'task' in request.form:
-            flash('generate task messages')
-            return redirect(url_for('blueprints.message_automation'))
-
-        if 'diary' in request.form:
-            flash('diary')
-            return redirect(url_for('blueprints.message_automation'))
-
-        if 'conversations' in request.form:
-            flash('count things')
-            return redirect(url_for('blueprints.message_automation'))
-
-        if 'delete' in request.form:
-            flash('delete messages')
-            return redirect(url_for('blueprints.message_automation'))

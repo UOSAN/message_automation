@@ -7,4 +7,5 @@ Werkzeug==0.16.1
 pandas
 flask-executor
 Flask-AutoIndex
+jsons
 -r tests/requirements.txt
