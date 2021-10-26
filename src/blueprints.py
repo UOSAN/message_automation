@@ -16,7 +16,6 @@ from src.redcap import Redcap, RedcapError
 from src.logging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
-from src.participant import Participant
 
 bp = Blueprint('blueprints', __name__)
 auto_bp = Blueprint('auto_bp', __name__)
@@ -46,25 +45,30 @@ def done(fn):
                 logger.info(result)
 
 
-def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
-    errors = []
-    if len(form_data['participant']) != 6 or not form_data['participant'].startswith('ASH'):
-        errors.append('Participant identifier must be in form \"ASHnnn\"')
+# get participant object from id in form
+def get_participant():
+    participant_id = request.form['participant']
+    if len(participant_id) != 6 or not participant_id.startswith('ASH'):
+        status_messages.append(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
 
-    if errors:
-        return errors
-    else:
+    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    try:
+        participant = rc.get_participant(participant_id)
+    except RedcapError as err:
+        status_messages.append(str(err))
         return None
+
+    status_messages.append(f'Participant {participant_id} found in RedCap')
+
+    return participant
+
 
 
 @bp.route('/diary', methods=['POST'])
 def diary():
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-    try:
-        participant = rc.get_participant(request.form['participant'])
-    except RedcapError as err:
-        status_messages.append(str(err))
-        return str(err)
+    participant = get_participant()
+    if not participant:
+        return 'none'
 
     try:
         eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
@@ -79,12 +83,9 @@ def diary():
 
 @bp.route('/messages', methods=['POST'])
 def generate_messages():
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-    try:
-        participant = rc.get_participant(request.form['participant'])
-    except Exception as err:
-        status_messages.append(str(err))
-        return str(err)
+    participant = get_participant()
+    if not participant:
+        return 'none'
 
     key = ('generate {}'.format(participant.participant_id))
 
@@ -104,18 +105,12 @@ def generate_messages():
     return status
 
 
-@bp.route('/delete', methods=['GET', 'POST'])
+@bp.route('/delete', methods=['POST'])
 def delete_events():
     # Access form properties, get participant information, get events, and delete
-    participant_id = request.form['participant']
-
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-
-    try:
-        participant = rc.get_participant(participant_id)
-    except RedcapError as err:
-        status_messages.append(str(err))
-        return str(err)
+    participant = get_participant()
+    if not participant:
+        return 'none'
 
     key = ('delete {}'.format(participant.participant_id))
 
@@ -137,12 +132,9 @@ def delete_events():
 
 @bp.route('/task', methods=['POST'])
 def task():
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-    try:
-        participant = rc.get_participant(request.form['participant'])
-    except RedcapError as err:
-        status_messages.append(str(err))
-        return str(err)
+    participant = get_participant()
+    if not participant:
+        return 'none'
 
     try:
         m = eg.generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
@@ -160,9 +152,6 @@ def task():
 @bp.route('/count/<participant_id>', methods=['GET'])
 def participant_responses(participant_id):
     part = ImmutableMultiDict({'participant': participant_id})
-    error = _validate_participant_id(part)
-    if error:
-        return make_response((jsonify(error), 400))
 
     # Use participant ID to get phone number, then get all events and filter conversations for participant responses.
     rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
@@ -181,11 +170,15 @@ def participant_responses(participant_id):
 
     return make_response(jsonify(conversations), 200)
 
+
 @bp.route('/responses', methods=['POST'])
 def responses():
-    participant_id = validate()
-    status_messages.append(participant_id)
-    return participant_id
+    participant = get_participant()
+    if not participant:
+        return 'no participant'
+    status_messages.append(participant.participant_id)
+    return 'ok'
+
 
 @bp.route('/progress', methods=['GET'])
 def progress():
@@ -233,27 +226,11 @@ def cleanup():
 def index():
     return render_template('index.html')
 
-import jsons
+
 @bp.route('/validate', methods=['POST'])
 def validate():
-    participant_id = request.form['participant']
-    if len(participant_id) != 6 or not participant_id.startswith('ASH'):
-        status_messages.append(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
+    participant = get_participant()
+    if participant:
+        return participant.participant_id
     else:
-        status_messages.append(f'{participant_id} is valid')
-
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-    try:
-        participant = rc.get_participant(participant_id)
-    except RedcapError as err:
-        status_messages.append(str(err))
-        return str(err)
-
-    status_messages.append(participant)
-
-    status_messages.append(jsons.dumps(participant))
-    part2 = jsons.load(jsons.dump(participant, Participant))
-    status_messages.append(part2)
-    status_messages.append(jsons.dumps(part2))
-    return participant_id
-
+        return 'none'
