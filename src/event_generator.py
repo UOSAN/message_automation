@@ -44,6 +44,18 @@ ITI = [
 ]
 
 
+# Get dates for diary messages, always including at least one weekend day
+def get_diary_dates(start_date: datetime, number_of_days=4):
+    dates = [start_date + timedelta(days=d) for d in range(0, number_of_days)]
+    day_of_week = [d.weekday() for d in dates]
+    # shift by one day until you have at least one weekend day
+    # 5 = Saturday, 6 = Sunday
+    while max(day_of_week) < 5:
+        dates = [d + timedelta(days=1) for d in dates]
+        day_of_week = [d.weekday() for d in dates]
+    return dates
+
+
 def intervals_valid(deltas: List[int]) -> bool:
     """
     Determine if intervals are valid
@@ -105,18 +117,19 @@ def daily_diary(config: Dict[str, str], participant: Participant):
     """
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
 
-    first_day = participant.daily_diary_time()
     participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
 
     events = []
-    for day in range(0, 4):
+
+    # Diary round 1
+    round1_start = participant.get_session0_date() + timedelta(days=2)
+    round1_dates = get_diary_dates(round1_start)
+    for day, date in enumerate(round1_dates):
         content = f'UO: Daily Diary #{day + 1}'
         title = f'ASH Daily Diary #{day + 1}'
-        t = first_day + timedelta(days=day)
         events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                    title=title,
-                                   start_time=t,
-                                   end_time=t,
+                                   start_time=date,
                                    content=content,
                                    participants=participants))
 
@@ -128,17 +141,15 @@ def daily_diary(config: Dict[str, str], participant: Participant):
     events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                title=title,
                                start_time=quit_message_date,
-                               end_time=quit_message_date,
                                content=content,
                                participants=participants))
 
-    quit_message_date = quit_message_date - timedelta(days=1)
+    day_before_quit = quit_message_date - timedelta(days=1)
     content = 'UO: Day Before'
     title = 'UO: Day Before'
     events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                title=title,
-                               start_time=quit_message_date,
-                               end_time=quit_message_date,
+                               start_time=day_before_quit,
                                content=content,
                                participants=participants))
 
@@ -225,17 +236,23 @@ def generate_messages(config, participant, instance_path):
         n = n + 1
 
     # Add daily diary messages
-    first_day = participant.daily_diary_time()
-    for day in range(0, 4):
+    # Diary round 2
+    round2_start = participant.get_quit_date() + timedelta(weeks=4)
+    # round2_start = participant.get_session0_date() + timedelta(days=37)
+    round2_dates = get_diary_dates(round2_start)
+    for day, date in enumerate(round2_dates):
         content = f'UO: Daily Diary #{day + 5}'
         title = f'ASH Daily Diary #{day + 5}'
-        t = first_day + timedelta(days=day + 37)
-        events.append(Event(time=t, title=title, content=content))
-    for day in range(0, 4):
+        events.append(Event(time=date, title=title, content=content))
+
+    # Diary round 3
+    round3_start = participant.get_session1_date() + timedelta(weeks=6)
+    # round3_start = participant.get_session0_date() + timedelta(days=114)
+    round3_dates = get_diary_dates(round3_start)
+    for day, date in enumerate(round3_dates):
         content = f'UO: Daily Diary #{day + 9}'
         title = f'ASH Daily Diary #{day + 9}'
-        t = first_day + timedelta(days=day + 114)
-        events.append(Event(time=t, title=title, content=content))
+        events.append(Event(time=date, title=title, content=content))
 
     if len(events) > 0:
         apptoto_events = []
@@ -285,7 +302,6 @@ def get_conversations(config, participant, instance_path):
     message_file = Path(instance_path) / config['message_file']
     messages = pd.read_csv(message_file, dtype=str)
     messages['content'] = 'UO: ' + messages.Message
-
 
     conversations = pd.merge(conversations, messages, on='content', how='left')
 
