@@ -35,7 +35,8 @@ class ApptotoParticipant:
 
 
 class ApptotoEvent:
-    def __init__(self, calendar: str, title: str, start_time: datetime, end_time: datetime,
+    def __init__(self, calendar: str, title: str, start_time: datetime,
+                 end_time: datetime=None,
                  content: str, participants: List[ApptotoParticipant]):
         """
         Create an ApptotoEvent.
@@ -53,7 +54,10 @@ class ApptotoEvent:
         self.calendar = calendar
         self.title = title
         self.start_time = start_time.isoformat()
-        self.end_time = end_time.isoformat()
+        if not end_time:
+            self.end_time = start_time.isoformat()
+        else:
+            self.end_time = end_time.isoformat()
         self.content = content
 
         self.participants = participants

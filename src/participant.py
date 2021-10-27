@@ -43,3 +43,6 @@ class Participant:
             return first_day
         else:
             raise ValueError('sleep time or session 0 date not known')
+
+
+    def _get_start_date(self)
