@@ -243,7 +243,6 @@ def generate_messages(config, participant, instance_path):
             apptoto_events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                                title=e.title,
                                                start_time=e.time,
-                                               end_time=e.time,
                                                content=e.content,
                                                participants=participants))
 

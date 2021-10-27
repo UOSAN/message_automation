@@ -47,7 +47,7 @@ class ApptotoEvent:
         :param str calendar: Calendar name
         :param str title: Event title
         :param datetime start_time: Start time of event
-        :param datetime end_time: End time of event
+        :param datetime end_time: End time of event (default = same as start_time)
         :param str content: Message content about event
         :param List[ApptotoParticipants] participants: Participants who will receive message content
         """
