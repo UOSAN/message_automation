@@ -63,7 +63,6 @@ def get_participant():
     return participant
 
 
-
 @bp.route('/diary', methods=['POST'])
 def diary():
     participant = get_participant()
@@ -175,7 +174,7 @@ def participant_responses(participant_id):
 def responses():
     participant = get_participant()
     if not participant:
-        return 'no participant'
+        return 'none'
     status_messages.append(participant.participant_id)
     return 'ok'
 
