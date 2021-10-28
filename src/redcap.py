@@ -74,6 +74,12 @@ class Redcap:
         if record:
             part.condition = Condition(int(record['condition']))
             part.session1_date = record['date_s1']
+
+        session = self._get_session2()
+        record = _get_record(session, participant_id)
+        if record:
+            part.session2_date = record['date_s2']
+
         return part
 
     def _make_request(self, request_data: Dict[str, str], fields_for_error: str):
@@ -109,5 +115,12 @@ class Redcap:
                         'events[0]': 'session_1_arm_1'}
         return self._make_request(request_data, 'Session 1 data')
 
+    def _get_session2(self):
+        request_data = {'content': 'record',
+                        'format': 'json',
+                        'fields[0]': 'ash_id',
+                        'fields[1]': 'date_s2',
+                        'events[0]': 'session_2_arm_1'}
+        return self._make_request(request_data, 'Session 2 data')
 
 

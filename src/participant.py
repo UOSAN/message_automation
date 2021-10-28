@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 class Participant:
@@ -16,6 +16,7 @@ class Participant:
         self.phone_number = phone
         self.session0_date = None
         self.session1_date = None
+        self.session2_date = None
         self.quit_date = None
         self.wake_time = None
         self.sleep_time = None
@@ -32,3 +33,6 @@ class Participant:
 
     def get_quit_date(self):
         return datetime.strptime(f'{self.quit_date} {self.sleep_time}', '%Y-%m-%d %H:%M')
+
+    def get_session2_date(self):
+        return datetime.strptime(f'{self.session2_date} {self.sleep_time}', '%Y-%m-%d %H:%M')

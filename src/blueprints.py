@@ -2,10 +2,9 @@ from typing import Optional, List
 from pathlib import Path
 from collections import deque
 import logging.config
+import zipfile
 
-from flask import (
-    Blueprint, current_app, flash, make_response, render_template, request, redirect, url_for
-)
+import flask
 
 from flask.json import jsonify
 from flask_autoindex import AutoIndexBlueprint
@@ -17,8 +16,8 @@ from src.logging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
 
-bp = Blueprint('blueprints', __name__)
-auto_bp = Blueprint('auto_bp', __name__)
+bp = flask.Blueprint('blueprints', __name__)
+auto_bp = flask.Blueprint('auto_bp', __name__)
 if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
@@ -47,11 +46,11 @@ def done(fn):
 
 # get participant object from id in form
 def get_participant():
-    participant_id = request.form['participant']
+    participant_id = flask.request.form['participant']
     if len(participant_id) != 6 or not participant_id.startswith('ASH'):
         status_messages.append(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
 
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    rc = Redcap(api_token=flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
     try:
         participant = rc.get_participant(participant_id)
     except RedcapError as err:
@@ -70,7 +69,7 @@ def diary():
         return 'none'
 
     try:
-        eg.daily_diary(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        eg.daily_diary(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
         status_messages.append(str(err))
@@ -90,9 +89,9 @@ def generate_messages():
 
     try:
         future_response = executor.submit_stored(key, eg.generate_messages,
-                                                 config=current_app.config['AUTOMATIONCONFIG'],
+                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
                                                  participant=participant,
-                                                 instance_path=current_app.instance_path)
+                                                 instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
         future_keys.append(key)
     except Exception as err:
@@ -115,7 +114,7 @@ def delete_events():
 
     try:
         future_response = executor.submit_stored(key, eg.delete_messages,
-                                                 config=current_app.config['AUTOMATIONCONFIG'],
+                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
                                                  participant=participant)
         future_response.add_done_callback(done)
         future_keys.append(key)
@@ -136,9 +135,9 @@ def task():
         return 'none'
 
     try:
-        m = eg.generate_task_files(config=current_app.config['AUTOMATIONCONFIG'],
+        m = eg.generate_task_files(config=flask.current_app.config['AUTOMATIONCONFIG'],
                                    participant=participant,
-                                   instance_path=current_app.instance_path)
+                                   instance_path=flask.current_app.instance_path)
 
     except Exception as err:
         status_messages.append(str(err))
@@ -153,21 +152,21 @@ def participant_responses(participant_id):
     part = ImmutableMultiDict({'participant': participant_id})
 
     # Use participant ID to get phone number, then get all events and filter conversations for participant responses.
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    rc = Redcap(api_token=flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
 
     try:
         participant = rc.get_participant(participant_id)
 
     except RedcapError as err:
-        return make_response((jsonify(str(err)), 404))
+        return flask.make_response((jsonify(str(err)), 404))
 
     try:
-        conversations = eg.get_conversations(config=current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        conversations = eg.get_conversations(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
     except Exception as err:
-        flash(str(err), 'danger')
-        return make_response((jsonify(str(err)), 404))
+        flask.flash(str(err), 'danger')
+        return flask.make_response((jsonify(str(err)), 404))
 
-    return make_response(jsonify(conversations), 200)
+    return flask.make_response(jsonify(conversations), 200)
 
 
 @bp.route('/responses', methods=['POST'])
@@ -203,27 +202,27 @@ def progress():
         executor.futures.pop(key)
         future_keys.remove(key)
 
-    return render_template('progress.html', messages=messages)
+    return flask.render_template('progress.html', messages=messages)
 
 
 @bp.route('/cleanup', methods=['GET', 'POST'])
 def cleanup():
-    if request.method == 'GET':
-        return render_template('cleanup_form.html')
-    elif request.method == 'POST':
-        if 'submit' in request.form:
+    if flask.request.method == 'GET':
+        return flask.render_template('cleanup_form.html')
+    elif flask.request.method == 'POST':
+        if 'submit' in flask.request.form:
             csv_path = Path(DOWNLOAD_DIR)
             csvfiles = csv_path.glob('*.csv')
             for filename in csvfiles:
                 filename.unlink()
 
-            flash('Deleted all csv files in download folder')
-        return redirect(url_for('blueprints.cleanup'))
+            flask.flash('Deleted all csv files in download folder')
+        return flask.redirect(flask.url_for('blueprints.cleanup'))
 
 
 @bp.route('/')
 def index():
-    return render_template('index.html')
+    return flask.render_template('index.html')
 
 
 @bp.route('/validate', methods=['POST'])
@@ -233,3 +232,20 @@ def validate():
         return participant.participant_id
     else:
         return 'none'
+
+
+@bp.route('/files', methods=['POST'])
+def downloads():
+    participant = get_participant()
+    if not participant:
+        return 'none'
+
+    csv_path = Path(DOWNLOAD_DIR)
+    csvfiles = csv_path.glob(f'*{participant.participant_id}*.csv')
+    compression = zipfile.ZIP_STORED
+    archive_name = f'{participant.participant_id}.zip'
+    print(Path.home() / archive_name)
+    with zipfile.ZipFile(Path.home() / archive_name, mode='w', compression=compression) as zf:
+        for f in csvfiles:
+            zf.write(f, arcname=f.name, compress_type=compression)
+    return flask.send_from_directory(Path.home(), archive_name, as_attachment=True)

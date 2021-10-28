@@ -2,7 +2,7 @@ import random
 from collections import namedtuple
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import logging.config
 import pandas as pd
 
@@ -246,7 +246,7 @@ def generate_messages(config, participant, instance_path):
         events.append(Event(time=date, title=title, content=content))
 
     # Diary round 3
-    round3_start = participant.get_session1_date() + timedelta(weeks=6)
+    round3_start = participant.get_session2_date() + timedelta(weeks=6)
     # round3_start = participant.get_session0_date() + timedelta(days=114)
     round3_dates = get_diary_dates(round3_start)
     for day, date in enumerate(round3_dates):
@@ -309,7 +309,8 @@ def get_conversations(config, participant, instance_path):
     file_name = csv_path / f'{participant.participant_id}_conversations.csv'
 
     conversations.to_csv(file_name, index=False, date_format='%x %X',
-                         columns=['timestamp', 'title', 'event_type', 'content', 'UO_ID'])
+                         columns=['timestamp', 'title', 'event_type',
+                                  'content', 'UO_ID'])
 
 
 def delete_messages(config, participant):

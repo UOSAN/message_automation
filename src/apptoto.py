@@ -36,8 +36,8 @@ class ApptotoParticipant:
 
 class ApptotoEvent:
     def __init__(self, calendar: str, title: str, start_time: datetime,
-                 end_time: datetime=None,
-                 content: str, participants: List[ApptotoParticipant]):
+                 content: str, participants: List[ApptotoParticipant],
+                 end_time: datetime = None):
         """
         Create an ApptotoEvent.
 
