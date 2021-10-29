@@ -156,6 +156,8 @@ def daily_diary(config: Dict[str, str], participant: Participant):
     if len(events) > 0:
         apptoto.post_events(events)
 
+    return 'Diary round 1 created'
+
 
 def generate_messages(config, participant, instance_path):
     """
@@ -165,6 +167,9 @@ def generate_messages(config, participant, instance_path):
     """
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
+
+    if not all (vars(participant).values()):
+        return 'Missing data from apptoto'
 
     participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
 
@@ -183,6 +188,7 @@ def generate_messages(config, participant, instance_path):
     Event = namedtuple('Event', ['time', 'title', 'content'])
 
     # Generate intervention messages
+    logger.info('generating intervention messages')
     n = 0
     for days in range(DAYS_1):
         delta = timedelta(days=days)
@@ -219,6 +225,7 @@ def generate_messages(config, participant, instance_path):
         events.append(Event(time=t, title=CIGS_TITLE, content=content))
 
     # Add booster messages
+    logger.info('adding booster messages')
     n = 1
     for days in range(1, 51, 7):
         delta = timedelta(days=days)
@@ -237,17 +244,19 @@ def generate_messages(config, participant, instance_path):
 
     # Add daily diary messages
     # Diary round 2
+    logger.info('adding diary rounds 2')
     round2_start = participant.get_quit_date() + timedelta(weeks=4)
-    # round2_start = participant.get_session0_date() + timedelta(days=37)
     round2_dates = get_diary_dates(round2_start)
     for day, date in enumerate(round2_dates):
         content = f'UO: Daily Diary #{day + 5}'
         title = f'ASH Daily Diary #{day + 5}'
         events.append(Event(time=date, title=title, content=content))
 
+    logger.info('adding diary rounds 3')
     # Diary round 3
+    logger.info(participant.session2_date)
+    logger.info(participant.get_session2_date())
     round3_start = participant.get_session2_date() + timedelta(weeks=6)
-    # round3_start = participant.get_session0_date() + timedelta(days=114)
     round3_dates = get_diary_dates(round3_start)
     for day, date in enumerate(round3_dates):
         content = f'UO: Daily Diary #{day + 9}'
@@ -266,10 +275,10 @@ def generate_messages(config, participant, instance_path):
         apptoto.post_events(apptoto_events)
 
         csv_path = Path(DOWNLOAD_DIR)
-        f = csv_path / (participant.participant_id + '.csv')
+        f = csv_path / (participant.participant_id + '_messages.csv')
         messages.write_to_file(f, columns=['UO_ID', 'Message'])
 
-    return
+    return f'Messages written to {participant.participant_id}_messages.csv'
 
 
 def generate_task_files(config, participant, instance_path):
@@ -283,7 +292,7 @@ def generate_task_files(config, participant, instance_path):
             file_name = csv_path / f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
             messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
 
-    return f'task files created for {participant.participant_id}'
+    return f'Task files created for {participant.participant_id}'
 
 
 def get_conversations(config, participant, instance_path):
@@ -311,10 +320,10 @@ def get_conversations(config, participant, instance_path):
     conversations.to_csv(file_name, index=False, date_format='%x %X',
                          columns=['timestamp', 'title', 'event_type',
                                   'content', 'UO_ID'])
+    return f'Conversations downloaded to {participant.participant_id}_conversations.csv'
 
 
 def delete_messages(config, participant):
-    print('you are here')
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
     logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
@@ -333,3 +342,4 @@ def delete_messages(config, participant):
         deleted += 1
         logger.info('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
     logger.info('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
+    return f'Deleted {len(event_ids)} messages for {participant.participant_id}'

@@ -1,14 +1,11 @@
-from typing import Optional, List
 from pathlib import Path
 from collections import deque
 import logging.config
 import zipfile
+from datetime import date
 
 import flask
-
-from flask.json import jsonify
 from flask_autoindex import AutoIndexBlueprint
-from werkzeug.datastructures import ImmutableMultiDict
 
 import src.event_generator as eg
 from src.redcap import Redcap, RedcapError
@@ -22,9 +19,7 @@ if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 
-# this has evolved into the main way to show messages for the user.
-# Could possibly replace/merge with logging
-future_keys = []
+# Could possibly replace/merge with logging?
 status_messages = deque(maxlen=200)
 
 logging.config.dictConfig(DEFAULT_LOGGING)
@@ -42,6 +37,7 @@ def done(fn):
             result = fn.result()
             if result:
                 logger.info(result)
+                status_messages.append(result)
 
 
 # get participant object from id in form
@@ -56,9 +52,6 @@ def get_participant():
     except RedcapError as err:
         status_messages.append(str(err))
         return None
-
-    status_messages.append(f'Participant {participant_id} found in RedCap')
-
     return participant
 
 
@@ -69,13 +62,13 @@ def diary():
         return 'none'
 
     try:
-        eg.daily_diary(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        m = eg.daily_diary(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
         status_messages.append(str(err))
         return str(err)
 
-    status_messages.append(f'Diary messages created for {participant.participant_id}')
+    status_messages.append(m)
     return 'success'
 
 
@@ -93,7 +86,6 @@ def generate_messages():
                                                  participant=participant,
                                                  instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
-        future_keys.append(key)
     except Exception as err:
         status_messages.append(str(err))
         return str(err)
@@ -117,7 +109,6 @@ def delete_events():
                                                  config=flask.current_app.config['AUTOMATIONCONFIG'],
                                                  participant=participant)
         future_response.add_done_callback(done)
-        future_keys.append(key)
     except ValueError as err:
         status_messages.append(str(err))
         return str(err)
@@ -147,62 +138,40 @@ def task():
     return m
 
 
-@bp.route('/count/<participant_id>', methods=['GET'])
-def participant_responses(participant_id):
-    part = ImmutableMultiDict({'participant': participant_id})
-
-    # Use participant ID to get phone number, then get all events and filter conversations for participant responses.
-    rc = Redcap(api_token=flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-
-    try:
-        participant = rc.get_participant(participant_id)
-
-    except RedcapError as err:
-        return flask.make_response((jsonify(str(err)), 404))
-
-    try:
-        conversations = eg.get_conversations(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
-    except Exception as err:
-        flask.flash(str(err), 'danger')
-        return flask.make_response((jsonify(str(err)), 404))
-
-    return flask.make_response(jsonify(conversations), 200)
-
-
 @bp.route('/responses', methods=['POST'])
 def responses():
     participant = get_participant()
     if not participant:
         return 'none'
-    status_messages.append(participant.participant_id)
-    return 'ok'
+
+    key = ('conversations {}'.format(participant.participant_id))
+
+    try:
+        future_response = executor.submit_stored(key, eg.get_conversations,
+                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                                 participant=participant,
+                                                 instance_path=flask.current_app.instance_path)
+        future_response.add_done_callback(done)
+
+    except ValueError as err:
+        status_messages.append(str(err))
+        return str(err)
+
+    status = f'Retrieving conversations for {participant.participant_id}'
+    status_messages.append(status)
+    return status
 
 
 @bp.route('/progress', methods=['GET'])
 def progress():
-    messages = list(status_messages)
-    finished = [k for k in future_keys if executor.futures.done(k)]
+    logfile = DEFAULT_LOGGING['handlers']['rotating_file']['filename']
+    with open(logfile, 'r') as f:
+        lines = f.readlines()
+    daily_messages = [x.split('  ')[-1] for x in lines
+                      if date.fromisoformat(x.split()[0]) == date.today()]
 
-    for key in future_keys:
-        if executor.futures.running(key):
-            msg = '{} running'.format(key)
-            messages.append(msg)
-        elif executor.futures.done(key):
-            if executor.futures.exception(key):
-                msg = '{} error: {}'.format(key, executor.futures.exception(key))
-            elif executor.futures.cancelled(key):
-                msg = '{} cancelled'.format(key)
-            else:
-                msg = '{} finished'.format(key)
+    return flask.render_template('progress.html', messages=daily_messages)
 
-            messages.append(msg)
-            status_messages.append(msg)
-
-    for key in finished:
-        executor.futures.pop(key)
-        future_keys.remove(key)
-
-    return flask.render_template('progress.html', messages=messages)
 
 
 @bp.route('/cleanup', methods=['GET', 'POST'])
@@ -229,22 +198,24 @@ def index():
 def validate():
     participant = get_participant()
     if participant:
+        logger.info(f'{participant.participant_id} found in RedCap')
+        if not all(vars(participant).values()):
+            logger.info(f'{participant.participant_id} is missing information')
+            logger.info([x for x in vars(participant) if not vars(participant)[x]])
         return participant.participant_id
     else:
         return 'none'
 
 
 @bp.route('/files', methods=['POST'])
-def downloads():
+def download_files():
     participant = get_participant()
     if not participant:
         return 'none'
-
     csv_path = Path(DOWNLOAD_DIR)
     csvfiles = csv_path.glob(f'*{participant.participant_id}*.csv')
     compression = zipfile.ZIP_STORED
     archive_name = f'{participant.participant_id}.zip'
-    print(Path.home() / archive_name)
     with zipfile.ZipFile(Path.home() / archive_name, mode='w', compression=compression) as zf:
         for f in csvfiles:
             zf.write(f, arcname=f.name, compress_type=compression)

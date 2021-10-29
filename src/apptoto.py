@@ -189,7 +189,6 @@ class Apptoto:
 
                 self._last_request_time = time.time()
                 attempts = attempts + 1
-                print(attempts)
 
             if r.status_code == requests.codes.ok:
                 new_events = r.json()['events']

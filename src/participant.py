@@ -36,3 +36,5 @@ class Participant:
 
     def get_session2_date(self):
         return datetime.strptime(f'{self.session2_date} {self.sleep_time}', '%Y-%m-%d %H:%M')
+
+

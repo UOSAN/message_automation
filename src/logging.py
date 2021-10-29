@@ -12,11 +12,11 @@ DEFAULT_LOGGING = {
         },
         'src.apptoto': {
             'level': 'INFO',
-            'handlers': ['console']
+            'handlers': ['console', 'rotating_file']
         },
         'src.event_generator': {
             'level': 'INFO',
-            'handlers': ['console']
+            'handlers': ['console', 'rotating_file']
         },
     },
     'handlers': {
@@ -29,7 +29,7 @@ DEFAULT_LOGGING = {
             'formatter': 'info',
             'filename': '/home/LogFiles/message_app.log',
             'mode': 'a',
-            'maxBytes': 1000,
+            'maxBytes': 100000,
             'backupCount': 1
         },
     },
