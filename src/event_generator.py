@@ -168,7 +168,7 @@ def generate_messages(config, participant, instance_path):
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
 
-    if not all (vars(participant).values()):
+    if not all(vars(participant).values()):
         return 'Missing data from apptoto'
 
     participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
@@ -303,24 +303,42 @@ def get_conversations(config, participant, instance_path):
                                 phone_number=participant.phone_number,
                                 include_conversations=True)
 
-    conversations = pd.json_normalize(events, record_path=['participants', 'conversations', 'messages'],
-                                      meta=['title', 'calendar_id'])
+    conversations = pd.json_normalize(events, record_path=['participants',
+                                                           'conversations',
+                                                           'messages'],
+                                      meta=['title',
+                                            'start_time',
+                                            'calendar_id',
+                                            ['participants', 'event_id']])
 
     conversations = conversations[conversations.calendar_id == ASH_CALENDAR_ID]
-    conversations['timestamp'] = pd.to_datetime(conversations['at'])
+    conversations['start_time'] = pd.to_datetime(conversations['start_time'])
+
+    sent = conversations[conversations.event_type == 'sent']
+    sent = sent.sort_values('id').groupby(['participants.event_id']).first()
     message_file = Path(instance_path) / config['message_file']
     messages = pd.read_csv(message_file, dtype=str)
     messages['content'] = 'UO: ' + messages.Message
+    sent = sent.merge(messages, on='content', how='left').set_index('start_time')
+    replied = conversations[conversations.event_type == 'replied'].set_index('start_time')
 
-    conversations = pd.merge(conversations, messages, on='content', how='left')
+    all_convos = sent.join(replied['content'], rsuffix='_reply')
+    sms_convos = all_convos[all_convos.title.str.contains(SMS_TITLE)]
 
     csv_path = Path(DOWNLOAD_DIR)
-    file_name = csv_path / f'{participant.participant_id}_conversations.csv'
+    sms_name = csv_path / f'{participant.participant_id}_sms_conversations.csv'
 
-    conversations.to_csv(file_name, index=False, date_format='%x %X',
-                         columns=['timestamp', 'title', 'event_type',
-                                  'content', 'UO_ID'])
-    return f'Conversations downloaded to {participant.participant_id}_conversations.csv'
+    sms_convos.to_csv(sms_name, date_format='%x %X',
+                      columns=['UO_ID', 'content', 'content_reply'],
+                      header=['UO_ID', 'Sent', 'Reply'])
+
+    cig_convos = all_convos[all_convos.title.str.contains(CIGS_TITLE)]
+    cig_name = csv_path / f'{participant.participant_id}_cig_conversations.csv'
+    cig_convos.to_csv(cig_name, date_format='%x %X',
+                      columns=['UO_ID', 'content', 'content_reply'],
+                      header=['UO_ID', 'Sent', 'Reply'])
+
+    return f'Conversations written to {sms_name} and {cig_name.name}'
 
 
 def delete_messages(config, participant):

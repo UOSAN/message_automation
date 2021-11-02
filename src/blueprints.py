@@ -19,7 +19,7 @@ if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 
-# Could possibly replace/merge with logging?
+
 status_messages = deque(maxlen=200)
 
 logging.config.dictConfig(DEFAULT_LOGGING)
@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 def done(fn):
     if fn.cancelled():
-        logger.info('cancelled')
+        logger.info('Operation cancelled')
     elif fn.done():
         error = fn.exception()
         if error:
-            logger.info('error returned: {}'.format(error))
+            logger.info('Error returned: {}'.format(error))
         else:
             result = fn.result()
             if result:
