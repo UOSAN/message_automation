@@ -3,7 +3,7 @@ DEFAULT_LOGGING = {
     'disable_existing_loggers': False,
     'loggers': {
         '': {
-            'level': 'INFO',
+            'level': 'CRITICAL',
             'handlers': ['rotating_file'],
         },
         'console': {
@@ -12,11 +12,11 @@ DEFAULT_LOGGING = {
         },
         'src.apptoto': {
             'level': 'INFO',
-            'handlers': ['console', 'rotating_file']
+            'handlers': ['console']
         },
         'src.event_generator': {
             'level': 'INFO',
-            'handlers': ['console', 'rotating_file']
+            'handlers': ['console']
         },
     },
     'handlers': {
@@ -26,7 +26,7 @@ DEFAULT_LOGGING = {
         },
         'rotating_file': {
             'class': 'logging.handlers.RotatingFileHandler',
-            'formatter': 'info',
+            'formatter': 'timestamped',
             'filename': '/home/LogFiles/message_app.log',
             'mode': 'a',
             'maxBytes': 100000,
@@ -34,7 +34,7 @@ DEFAULT_LOGGING = {
         },
     },
     'formatters': {
-        'info': {
+        'timestamped': {
             'format': '%(asctime)s  %(message)s'
         },
     },

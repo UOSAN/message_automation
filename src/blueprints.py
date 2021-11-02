@@ -20,23 +20,21 @@ if not Path(DOWNLOAD_DIR).exists():
 AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
 
 
-status_messages = deque(maxlen=200)
-
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
 
 
 def done(fn):
     if fn.cancelled():
-        logger.info('Operation cancelled')
+        logger.critical('Operation cancelled')
     elif fn.done():
         error = fn.exception()
         if error:
-            logger.info('Error returned: {}'.format(error))
+            logger.error('Error returned: {}'.format(error))
         else:
             result = fn.result()
             if result:
-                logger.info(result)
+                logger.critical(result)
                 status_messages.append(result)
 
 
@@ -65,10 +63,10 @@ def diary():
         m = eg.daily_diary(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
-        status_messages.append(str(err))
+        logger.error(str(err))
         return str(err)
 
-    status_messages.append(m)
+    logger.critical(m)
     return 'success'
 
 
@@ -87,11 +85,11 @@ def generate_messages():
                                                  instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
     except Exception as err:
-        status_messages.append(str(err))
+        logger.error(str(err))
         return str(err)
 
     status = f'Message generation started for {participant.participant_id}'
-    status_messages.append(status)
+    logger.critical(status)
     return status
 
 
@@ -110,11 +108,11 @@ def delete_events():
                                                  participant=participant)
         future_response.add_done_callback(done)
     except ValueError as err:
-        status_messages.append(str(err))
+        logger.error(str(err))
         return str(err)
 
     status = f'Message deletion started for {participant.participant_id}'
-    status_messages.append(status)
+    logger.critical(status)
 
     return status
 
@@ -131,10 +129,10 @@ def task():
                                    instance_path=flask.current_app.instance_path)
 
     except Exception as err:
-        status_messages.append(str(err))
+        logger.error(str(err))
         return str(err)
 
-    status_messages.append(m)
+    logger.critical(m)
     return m
 
 
@@ -154,11 +152,11 @@ def responses():
         future_response.add_done_callback(done)
 
     except ValueError as err:
-        status_messages.append(str(err))
+        logger.error(str(err))
         return str(err)
 
     status = f'Retrieving conversations for {participant.participant_id}'
-    status_messages.append(status)
+    logger.critical(status)
     return status
 
 
@@ -185,7 +183,7 @@ def cleanup():
             for filename in csvfiles:
                 filename.unlink()
 
-            flask.flash('Deleted all csv files in download folder')
+            logger.critical('Deleted all csv files in download folder')
         return flask.redirect(flask.url_for('blueprints.cleanup'))
 
 
@@ -198,10 +196,10 @@ def index():
 def validate():
     participant = get_participant()
     if participant:
-        logger.info(f'{participant.participant_id} found in RedCap')
+        logger.critical(f'{participant.participant_id} found in RedCap')
         if not all(vars(participant).values()):
-            logger.info(f'{participant.participant_id} is missing information')
-            logger.info([x for x in vars(participant) if not vars(participant)[x]])
+            missing = ', '.join([x for x in vars(participant) if not vars(participant)[x]])
+            logger.error(f'{participant.participant_id} is missing information: {missing}')
         return participant.participant_id
     else:
         return 'none'
