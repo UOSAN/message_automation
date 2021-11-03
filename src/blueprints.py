@@ -155,14 +155,24 @@ def responses():
     return status
 
 
+def isisoformat(item):
+    try:
+        date.fromisoformat(item)
+    except ValueError:
+        return False
+    return True
+
+
 @bp.route('/progress', methods=['GET'])
 def progress():
     logfile = DEFAULT_LOGGING['handlers']['rotating_file']['filename']
     with open(logfile, 'r') as f:
         lines = f.readlines()
-    daily_messages = [x.split('  ')[-1] for x in reversed(lines)
-                      if date.fromisoformat(x.split()[0]) == date.today()]
 
+    daily_messages = [x.split('  ')[-1] for x in reversed(lines)
+                      if isisoformat(x.split()[0]) and date.fromisoformat(x.split()[0]) == date.today()]
+
+#    daily_messages = list(reversed(lines))
     return flask.render_template('progress.html', messages=daily_messages)
 
 

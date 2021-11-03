@@ -340,7 +340,6 @@ def get_conversations(config, participant, instance_path):
 
 def delete_messages(config, participant):
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
-    logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
 
     events = apptoto.get_events(begin=begin.isoformat(), phone_number=participant.phone_number)
