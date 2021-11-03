@@ -79,8 +79,6 @@ class Redcap:
         record = _get_record(session, participant_id)
         if record:
             part.session2_date = record['date_s2']
-        pp = pprint.PrettyPrinter(indent=4)
-        pp.pprint(vars(part))
 
         return part
 

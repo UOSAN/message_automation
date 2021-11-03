@@ -1,11 +1,9 @@
 from pathlib import Path
-from collections import deque
 import logging.config
 import zipfile
 from datetime import date
 
 import flask
-from flask_autoindex import AutoIndexBlueprint
 
 import src.event_generator as eg
 from src.redcap import Redcap, RedcapError
@@ -17,8 +15,6 @@ bp = flask.Blueprint('blueprints', __name__)
 auto_bp = flask.Blueprint('auto_bp', __name__)
 if not Path(DOWNLOAD_DIR).exists():
     Path(DOWNLOAD_DIR).mkdir()
-AutoIndexBlueprint(auto_bp, browse_root=DOWNLOAD_DIR)
-
 
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
@@ -26,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def done(fn):
     if fn.cancelled():
-        logger.critical('Operation cancelled')
+        logger.info('Operation cancelled')
     elif fn.done():
         error = fn.exception()
         if error:
@@ -34,21 +30,20 @@ def done(fn):
         else:
             result = fn.result()
             if result:
-                logger.critical(result)
-                status_messages.append(result)
+                logger.info(result)
 
 
 # get participant object from id in form
 def get_participant():
     participant_id = flask.request.form['participant']
     if len(participant_id) != 6 or not participant_id.startswith('ASH'):
-        status_messages.append(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
+        logger.warning(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
 
     rc = Redcap(api_token=flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
     try:
         participant = rc.get_participant(participant_id)
     except RedcapError as err:
-        status_messages.append(str(err))
+        logger.error(str(err))
         return None
     return participant
 
@@ -66,7 +61,7 @@ def diary():
         logger.error(str(err))
         return str(err)
 
-    logger.critical(m)
+    logger.info(m)
     return 'success'
 
 
@@ -89,7 +84,7 @@ def generate_messages():
         return str(err)
 
     status = f'Message generation started for {participant.participant_id}'
-    logger.critical(status)
+    logger.info(status)
     return status
 
 
@@ -112,7 +107,7 @@ def delete_events():
         return str(err)
 
     status = f'Message deletion started for {participant.participant_id}'
-    logger.critical(status)
+    logger.info(status)
 
     return status
 
@@ -132,7 +127,7 @@ def task():
         logger.error(str(err))
         return str(err)
 
-    logger.critical(m)
+    logger.info(m)
     return m
 
 
@@ -156,7 +151,7 @@ def responses():
         return str(err)
 
     status = f'Retrieving conversations for {participant.participant_id}'
-    logger.critical(status)
+    logger.info(status)
     return status
 
 
@@ -165,30 +160,15 @@ def progress():
     logfile = DEFAULT_LOGGING['handlers']['rotating_file']['filename']
     with open(logfile, 'r') as f:
         lines = f.readlines()
-    daily_messages = [x.split('  ')[-1] for x in lines
+    daily_messages = [x.split('  ')[-1] for x in reversed(lines)
                       if date.fromisoformat(x.split()[0]) == date.today()]
 
     return flask.render_template('progress.html', messages=daily_messages)
 
 
-
-@bp.route('/cleanup', methods=['GET', 'POST'])
-def cleanup():
-    if flask.request.method == 'GET':
-        return flask.render_template('cleanup_form.html')
-    elif flask.request.method == 'POST':
-        if 'submit' in flask.request.form:
-            csv_path = Path(DOWNLOAD_DIR)
-            csvfiles = csv_path.glob('*.csv')
-            for filename in csvfiles:
-                filename.unlink()
-
-            logger.critical('Deleted all csv files in download folder')
-        return flask.redirect(flask.url_for('blueprints.cleanup'))
-
-
 @bp.route('/')
 def index():
+
     return flask.render_template('index.html')
 
 
@@ -196,7 +176,7 @@ def index():
 def validate():
     participant = get_participant()
     if participant:
-        logger.critical(f'{participant.participant_id} found in RedCap')
+        logger.info(f'{participant.participant_id} found in RedCap')
         if not all(vars(participant).values()):
             missing = ', '.join([x for x in vars(participant) if not vars(participant)[x]])
             logger.error(f'{participant.participant_id} is missing information: {missing}')

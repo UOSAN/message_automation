@@ -1,9 +1,9 @@
 DEFAULT_LOGGING = {
     'version': 1,
-    'disable_existing_loggers': False,
+    'disable_existing_loggers': True,
     'loggers': {
         '': {
-            'level': 'CRITICAL',
+            'level': 'INFO',
             'handlers': ['rotating_file'],
         },
         'console': {

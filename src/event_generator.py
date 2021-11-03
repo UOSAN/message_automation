@@ -169,7 +169,9 @@ def generate_messages(config, participant, instance_path):
                       user=config['apptoto_user'])
 
     if not all(vars(participant).values()):
-        return 'Missing data from apptoto'
+        missing = ', '.join([x for x in vars(participant) if not vars(participant)[x]])
+        logger.error(f'{participant.participant_id} is missing information: {missing}')
+        return 'Unable to generate messages due to missing data from apptoto'
 
     participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
 
@@ -188,7 +190,7 @@ def generate_messages(config, participant, instance_path):
     Event = namedtuple('Event', ['time', 'title', 'content'])
 
     # Generate intervention messages
-    logger.critical('generating intervention messages')
+    logger.info(f'Generating intervention messages for {participant.participant_id}')
     n = 0
     for days in range(DAYS_1):
         delta = timedelta(days=days)
@@ -225,7 +227,6 @@ def generate_messages(config, participant, instance_path):
         events.append(Event(time=t, title=CIGS_TITLE, content=content))
 
     # Add booster messages
-    logger.critical('adding booster messages')
     n = 1
     for days in range(1, 51, 7):
         delta = timedelta(days=days)
@@ -244,7 +245,6 @@ def generate_messages(config, participant, instance_path):
 
     # Add daily diary messages
     # Diary round 2
-    logger.critical('adding diary rounds 2')
     round2_start = participant.get_quit_date() + timedelta(weeks=4)
     round2_dates = get_diary_dates(round2_start)
     for day, date in enumerate(round2_dates):
@@ -252,10 +252,7 @@ def generate_messages(config, participant, instance_path):
         title = f'ASH Daily Diary #{day + 5}'
         events.append(Event(time=date, title=title, content=content))
 
-    logger.critical('adding diary rounds 3')
     # Diary round 3
-    logger.critical(participant.session2_date)
-    logger.critical(participant.get_session2_date())
     round3_start = participant.get_session2_date() + timedelta(weeks=6)
     round3_dates = get_diary_dates(round3_start)
     for day, date in enumerate(round3_dates):
@@ -291,7 +288,7 @@ def generate_task_files(config, participant, instance_path):
             messages.add_column('iti', ITI)
             file_name = csv_path / f'VAFF_{participant.participant_id}_Session{session}_Run{run}.csv'
             messages.write_to_file(file_name, columns=['Message', 'iti'], header=['message', 'iti'])
-
+            logger.info(f'Wrote {file_name.name}')
     return f'Task files created for {participant.participant_id}'
 
 
@@ -338,19 +335,19 @@ def get_conversations(config, participant, instance_path):
                       columns=['UO_ID', 'content', 'content_reply'],
                       header=['UO_ID', 'Sent', 'Reply'])
 
-    return f'Conversations written to {sms_name} and {cig_name.name}'
+    return f'Conversations written to {sms_name.name} and {cig_name.name}'
 
 
 def delete_messages(config, participant):
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
-    logger.critical('Deletion started for {}'.format(participant.participant_id))
+    logger.info('Deletion started for {}'.format(participant.participant_id))
     begin = datetime.now()
 
     events = apptoto.get_events(begin=begin.isoformat(), phone_number=participant.phone_number)
     event_ids = [e['id'] for e in events if not e.get('is_deleted')
                  and e.get('calendar_id') == ASH_CALENDAR_ID]
 
-    logger.critical('Found {} messages from {} events for {}'.format(len(event_ids),
+    logger.info('Found {} messages from {} events for {}'.format(len(event_ids),
                                                                  len(events),
                                                                  participant.participant_id))
 
@@ -358,6 +355,6 @@ def delete_messages(config, participant):
     for event_id in event_ids:
         apptoto.delete_event(event_id)
         deleted += 1
-        logger.critical('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
-    logger.critical('Deleted {} messages for {}.'.format(len(event_ids), participant.participant_id))
+        logger.info('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
+
     return f'Deleted {len(event_ids)} messages for {participant.participant_id}'

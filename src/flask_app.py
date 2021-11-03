@@ -1,10 +1,7 @@
 import secrets
-
 from flask import Flask
-
 from src.executor import executor
-
-from .blueprints import bp, auto_bp
+from .blueprints import bp
 
 
 def create_app(test_config=None):
@@ -23,6 +20,5 @@ def create_app(test_config=None):
     app.config['EXECUTOR_TYPE'] = 'thread'
     app.config['EXECUTOR_PROPAGATE_EXCEPTIONS'] = True
     app.register_blueprint(bp)
-    app.register_blueprint(auto_bp, url_prefix='/downloads')
 
     return app
