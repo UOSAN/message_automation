@@ -44,6 +44,11 @@ ITI = [
 ]
 
 
+def get_datetime(isodate, isotime, offset=timedelta(0)):
+    dt = datetime.strptime(f'{isodate} {isotime}', '%Y-%m-%d %H:%M')
+    return dt + offset
+
+
 # Get dates for diary messages, always including at least one weekend day
 def get_diary_dates(start_date: datetime, number_of_days=4):
     dates = [start_date + timedelta(days=d) for d in range(0, number_of_days)]
@@ -122,7 +127,9 @@ def daily_diary(config: Dict[str, str], participant: Participant):
     events = []
 
     # Diary round 1
-    round1_start = participant.get_session0_date() + timedelta(days=2)
+    round1_start = get_datetime(participant.session0_date,
+                                participant.sleep_time,
+                                timedelta(days=2, hours=-2))
     round1_dates = get_diary_dates(round1_start)
     for day, date in enumerate(round1_dates):
         content = f'UO: Daily Diary #{day + 1}'
@@ -134,8 +141,9 @@ def daily_diary(config: Dict[str, str], participant: Participant):
                                    participants=participants))
 
     # Add quit_message_date date boosters
-    s = datetime.strptime(f'{participant.quit_date} {participant.wake_time}', '%Y-%m-%d %H:%M')
-    quit_message_date = s + timedelta(hours=3)
+    quit_message_date = get_datetime(participant.quit_date,
+                                     participant.wake_time,
+                                     timedelta(hours=3))
     content = 'UO: Quit Date'
     title = 'UO: Quit Date'
     events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
@@ -182,8 +190,8 @@ def generate_messages(config, participant, instance_path):
     messages.filter_by_condition(participant.condition, participant.message_values,
                                  num_required_messages)
 
-    s = datetime.strptime(f'{participant.quit_date} {participant.wake_time}', '%Y-%m-%d %H:%M')
-    e = datetime.strptime(f'{participant.quit_date} {participant.sleep_time}', '%Y-%m-%d %H:%M')
+    s = get_datetime(participant.quit_date, participant.wake_time)
+    e = get_datetime(participant.quit_date, participant.sleep_time)
     hour_before_sleep_time = e - timedelta(seconds=3600)
     three_hours_before_sleep_time = e - timedelta(hours=3)
 
@@ -245,7 +253,9 @@ def generate_messages(config, participant, instance_path):
 
     # Add daily diary messages
     # Diary round 2
-    round2_start = participant.get_quit_date() + timedelta(weeks=4)
+    round2_start = get_datetime(participant.quit_date,
+                                participant.sleep_time,
+                                timedelta(weeks=4, hours=-2))
     round2_dates = get_diary_dates(round2_start)
     for day, date in enumerate(round2_dates):
         content = f'UO: Daily Diary #{day + 5}'
@@ -253,7 +263,9 @@ def generate_messages(config, participant, instance_path):
         events.append(Event(time=date, title=title, content=content))
 
     # Diary round 3
-    round3_start = participant.get_session2_date() + timedelta(weeks=6)
+    round3_start = get_datetime(participant.session2_date,
+                                participant.sleep_time,
+                                timedelta(weeks=6, hours=-2))
     round3_dates = get_diary_dates(round3_start)
     for day, date in enumerate(round3_dates):
         content = f'UO: Daily Diary #{day + 9}'
