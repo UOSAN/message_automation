@@ -10,6 +10,10 @@ Install the Azure command line interface tools:
 ```
 brew install azure-cli
 ```
+alternatively, on Ubuntu:
+```
+sudo apt install azure-cli
+```
 Then log in to azure on the command line:
 ```
 az login
