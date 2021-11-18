@@ -48,14 +48,14 @@ def get_participant():
     return participant
 
 
-@bp.route('/diary', methods=['POST'])
-def diary():
+@bp.route('/diary1', methods=['POST'])
+def diary1():
     participant = get_participant()
     if not participant:
         return 'none'
 
     try:
-        m = eg.daily_diary(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        m = eg.daily_diary_one(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
         logger.error(str(err))
@@ -64,6 +64,22 @@ def diary():
     logger.info(m)
     return 'success'
 
+
+@bp.route('/diary3', methods=['POST'])
+def diary2():
+    participant = get_participant()
+    if not participant:
+        return 'none'
+
+    try:
+        m = eg.daily_diary_three(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+
+    except Exception as err:
+        logger.error(str(err))
+        return str(err)
+
+    logger.info(m)
+    return 'success'
 
 @bp.route('/messages', methods=['POST'])
 def generate_messages():

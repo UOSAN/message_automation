@@ -112,15 +112,18 @@ def _condition_abbrev(condition: Condition) -> str:
         assert 'Invalid condition'
 
 
-def daily_diary(config: Dict[str, str], participant: Participant):
+def daily_diary_one(config: Dict[str, str], participant: Participant):
     """
-    Generate events for the first round of daily diary messages.
-
     Generate events for the first round of daily diary messages,
     which are sent after session 0, before session 1.
     :return:
     """
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
+
+    if not all(vars(participant).values()):
+        missing = ', '.join([x for x in vars(participant) if not vars(participant)[x]])
+        logger.error(f'{participant.participant_id} is missing information: {missing}')
+        return 'Unable to generate messages due to missing data from apptoto'
 
     participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
 
@@ -165,6 +168,43 @@ def daily_diary(config: Dict[str, str], participant: Participant):
         apptoto.post_events(events)
 
     return 'Diary round 1 created'
+
+
+def daily_diary_three(config: Dict[str, str], participant: Participant):
+    """
+    Generate events for the third round of daily diary messages,
+    which are sent after session 2.
+    :return:
+    """
+    apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
+
+    if not all(vars(participant).values()):
+        missing = ', '.join([x for x in vars(participant) if not vars(participant)[x]])
+        logger.error(f'{participant.participant_id} is missing information: {missing}')
+        return 'Unable to generate messages due to missing data from apptoto'
+
+    participants = [ApptotoParticipant(participant.initials, participant.phone_number)]
+
+    events = []
+
+    # Diary round 3
+    round3_start = get_datetime(participant.session2_date,
+                                participant.sleep_time,
+                                timedelta(weeks=6, hours=-2))
+    round3_dates = get_diary_dates(round3_start)
+    for day, date in enumerate(round3_dates):
+        content = f'UO: Daily Diary #{day + 9}'
+        title = f'ASH Daily Diary #{day + 9}'
+        events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
+                                   title=title,
+                                   start_time=date,
+                                   content=content,
+                                   participants=participants))
+
+    if len(events) > 0:
+        apptoto.post_events(events)
+
+    return 'Diary round 3 created'
 
 
 def generate_messages(config, participant, instance_path):
@@ -251,8 +291,7 @@ def generate_messages(config, participant, instance_path):
         events.append(Event(time=t, title=title, content=content))
         n = n + 1
 
-    # Add daily diary messages
-    # Diary round 2
+    # Add daily diary round 2 messages
     round2_start = get_datetime(participant.quit_date,
                                 participant.sleep_time,
                                 timedelta(weeks=4, hours=-2))
@@ -260,16 +299,6 @@ def generate_messages(config, participant, instance_path):
     for day, date in enumerate(round2_dates):
         content = f'UO: Daily Diary #{day + 5}'
         title = f'ASH Daily Diary #{day + 5}'
-        events.append(Event(time=date, title=title, content=content))
-
-    # Diary round 3
-    round3_start = get_datetime(participant.session2_date,
-                                participant.sleep_time,
-                                timedelta(weeks=6, hours=-2))
-    round3_dates = get_diary_dates(round3_start)
-    for day, date in enumerate(round3_dates):
-        content = f'UO: Daily Diary #{day + 9}'
-        title = f'ASH Daily Diary #{day + 9}'
         events.append(Event(time=date, title=title, content=content))
 
     if len(events) > 0:
