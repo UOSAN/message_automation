@@ -1,6 +1,6 @@
 import random
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from pathlib import Path
 from typing import Dict, List
 import logging.config
@@ -50,7 +50,7 @@ def get_datetime(isodate, isotime, offset=timedelta(0)):
 
 
 # Get dates for diary messages, always including at least one weekend day
-def get_diary_dates(start_date: datetime, number_of_days=4):
+def get_diary_dates(start_date: date, number_of_days=4):
     dates = [start_date + timedelta(days=d) for d in range(0, number_of_days)]
     day_of_week = [d.weekday() for d in dates]
     # shift by one day until you have at least one weekend day
@@ -61,26 +61,10 @@ def get_diary_dates(start_date: datetime, number_of_days=4):
     return dates
 
 
-def intervals_valid(deltas: List[int]) -> bool:
-    """
-    Determine if intervals are valid
-
-    :param deltas: A list of integer number of seconds
-    :return: True if the interval between each consecutive pair of entries
-    to deltas is greater than one hour.
-    """
-    one_hour = timedelta(seconds=3600)
-    for a, b in zip(deltas, deltas[1:]):
-        interval = timedelta(seconds=(b - a))
-        if interval < one_hour:
-            return False
-
-    return True
-
-
+# see stack overflow 51918580
 def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
-    Create randomly spaced times between start and sleep_time.
+    Create randomly spaced times between start and end time.
     :param n:
     :param start: Start time
     :type start: datetime
@@ -89,15 +73,12 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     :param n: Number of times to create
     :return: List of datetime
     """
+    # minimum minutes between times
+    min_interval = 60
     delta = end - start
-    r = [random.randrange(int(delta.total_seconds())) for _ in range(n)]
-    r.sort()
-
-    while not intervals_valid(r):
-        r = [random.randrange(int(delta.total_seconds())) for _ in range(n)]
-        r.sort()
-
-    times = [start + timedelta(seconds=x) for x in r]
+    range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
+    r = [(min_interval - 1) * i + x for i, x in enumerate(sorted(random.sample(range(range_max), n)))]
+    times = [start + timedelta(minutes=x) for x in r]
     return times
 
 
@@ -130,39 +111,18 @@ def daily_diary_one(config: Dict[str, str], participant: Participant):
     events = []
 
     # Diary round 1
-    round1_start = get_datetime(participant.session0_date,
-                                participant.sleep_time,
-                                timedelta(days=2, hours=-2))
+    round1_start = date.fromisoformat(participant.session0_date) + timedelta(days=2)
     round1_dates = get_diary_dates(round1_start)
-    for day, date in enumerate(round1_dates):
+    sleep_time = time.fromisoformat(participant.sleep_time)
+    for day, message_date in enumerate(round1_dates):
         content = f'UO: Daily Diary #{day + 1}'
         title = f'ASH Daily Diary #{day + 1}'
+        message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
         events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                    title=title,
-                                   start_time=date,
+                                   start_time=message_datetime,
                                    content=content,
                                    participants=participants))
-
-    # Add quit_message_date date boosters
-    quit_message_date = get_datetime(participant.quit_date,
-                                     participant.wake_time,
-                                     timedelta(hours=3))
-    content = 'UO: Quit Date'
-    title = 'UO: Quit Date'
-    events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
-                               title=title,
-                               start_time=quit_message_date,
-                               content=content,
-                               participants=participants))
-
-    day_before_quit = quit_message_date - timedelta(days=1)
-    content = 'UO: Day Before'
-    title = 'UO: Day Before'
-    events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
-                               title=title,
-                               start_time=day_before_quit,
-                               content=content,
-                               participants=participants))
 
     if len(events) > 0:
         apptoto.post_events(events)
@@ -188,16 +148,17 @@ def daily_diary_three(config: Dict[str, str], participant: Participant):
     events = []
 
     # Diary round 3
-    round3_start = get_datetime(participant.session2_date,
-                                participant.sleep_time,
-                                timedelta(weeks=6, hours=-2))
+    round3_start = date.fromisoformat(participant.session2_date) + timedelta(weeks=6)
+
     round3_dates = get_diary_dates(round3_start)
-    for day, date in enumerate(round3_dates):
+    sleep_time = time.fromisoformat(participant.sleep_time)
+    for day, message_date in enumerate(round3_dates):
         content = f'UO: Daily Diary #{day + 9}'
         title = f'ASH Daily Diary #{day + 9}'
+        message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
         events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                    title=title,
-                                   start_time=date,
+                                   start_time=message_datetime,
                                    content=content,
                                    participants=participants))
 
@@ -230,6 +191,10 @@ def generate_messages(config, participant, instance_path):
     messages.filter_by_condition(participant.condition, participant.message_values,
                                  num_required_messages)
 
+    quit_date = date.fromisoformat(participant.quit_date)
+    wake_time = time.fromisoformat(participant.wake_time)
+    sleep_time = time.fromisoformat(participant.sleep_time)
+
     s = get_datetime(participant.quit_date, participant.wake_time)
     e = get_datetime(participant.quit_date, participant.sleep_time)
     hour_before_sleep_time = e - timedelta(seconds=3600)
@@ -237,73 +202,83 @@ def generate_messages(config, participant, instance_path):
 
     Event = namedtuple('Event', ['time', 'title', 'content'])
 
+    # Add quit_message_date date boosters 3 hrs after wake time
+    message_datetime = datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
+    events.append(Event(time=message_datetime, title='UO: Day Before', content='UO: Day Before'))
+    message_datetime = datetime.combine(quit_date, wake_time) + timedelta(hours=3)
+    events.append(Event(time=message_datetime, title='UO: Quit Date', content='UO: Quit Date'))
+
+    # Add one message per day asking for a reply with the number of cigarettes smoked, 1 hr before bedtime
+    for days in range(DAYS_1 + DAYS_2):
+        message_date = quit_date + timedelta(days=days)
+        message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=1)
+        content = "UO: Good evening! Please respond with the number of cigarettes you have smoked today. " \
+                  "If you have not smoked any cigarettes, please respond with a 0. Thank you!"
+        events.append(Event(time=message_datetime, title=CIGS_TITLE, content=content))
+
+    # Add booster messages, 3 hrs before bedtime
+    n = 1
+    booster_dates = []
+    for days in range(1, 51, 7):
+        message_date = quit_date + timedelta(days=days)
+        booster_dates.append(message_date)
+        message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+
+        title = f'{_condition_abbrev(participant.condition)} Booster {n}'
+        content = "UO: Booster session"
+        events.append(Event(time=message_datetime, title=title, content=content))
+        n = n + 1
+
+        message_date = quit_date + timedelta(days=(days + 3))
+        booster_dates.append(message_date)
+        message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+        title = f'{_condition_abbrev(participant.condition)} Booster {n}'
+        content = "UO: Booster session"
+        events.append(Event(time=message_datetime, title=title, content=content))
+        n = n + 1
+
+    # Add daily diary round 2 messages, 2 hrs before bedtime
+    round2_start = quit_date + timedelta(weeks=4)
+    round2_dates = get_diary_dates(round2_start)
+    for day, message_date in enumerate(round2_dates):
+        message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+        content = f'UO: Daily Diary #{day + 5}'
+        title = f'ASH Daily Diary #{day + 5}'
+        events.append(Event(time=message_datetime, title=title, content=content))
+
     # Generate intervention messages
     logger.info(f'Generating intervention messages for {participant.participant_id}')
     n = 0
-    for days in range(DAYS_1):
-        delta = timedelta(days=days)
-        start = s + delta
-        end = e + delta
-        # Get times each day to send messages
-        # Send 5 messages a day for the first 28 days
-        times_list = random_times(start, end, MESSAGES_PER_DAY_1)
-        for t in times_list:
-            # Prepend each message with "UO: " ERROR here
-            content = "UO: " + messages[n]
-            events.append(Event(time=t, title=SMS_TITLE, content=content))
-            n = n + 1
+    for day in range(DAYS_1 + DAYS_2):
+        message_date = quit_date + timedelta(days=day)
+        if message_date == quit_date:
+            start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
+        else:
+            start_time = datetime.combine(message_date, wake_time)
 
-    for days in range(DAYS_1, DAYS_1 + DAYS_2):
-        delta = timedelta(days=days)
-        start = s + delta
-        end = e + delta
+        if message_date in booster_dates:
+            end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=4)
+        elif message_date in round2_dates:
+            end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+        else:
+            end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+
         # Get times each day to send messages
-        # Send 4 messages a day for the first 28 days
-        times_list = random_times(start, end, MESSAGES_PER_DAY_2)
+        # Send 5 messages a day for the first 28 days, 4 after
+        if day in range(DAYS_1):
+            n_messages = MESSAGES_PER_DAY_1
+        else:
+            n_messages = MESSAGES_PER_DAY_2
+        times_list = random_times(start_time, end_time, n_messages)
         for t in times_list:
             # Prepend each message with "UO: "
             content = "UO: " + messages[n]
             events.append(Event(time=t, title=SMS_TITLE, content=content))
             n = n + 1
 
-    # Add one message per day asking for a reply with the number of cigarettes smoked
-    for days in range(DAYS_1 + DAYS_2):
-        delta = timedelta(days=days)
-        t = hour_before_sleep_time + delta
-        content = "UO: Good evening! Please respond with the number of cigarettes you have smoked today. " \
-                  "If you have not smoked any cigarettes, please respond with a 0. Thank you!"
-        events.append(Event(time=t, title=CIGS_TITLE, content=content))
-
-    # Add booster messages
-    n = 1
-    for days in range(1, 51, 7):
-        delta = timedelta(days=days)
-        t = three_hours_before_sleep_time + delta
-        title = f'{_condition_abbrev(participant.condition)} Booster {n}'
-        content = "UO: Booster session"
-        events.append(Event(time=t, title=title, content=content))
-        n = n + 1
-
-        delta = timedelta(days=(days + 3))
-        t = three_hours_before_sleep_time + delta
-        title = f'{_condition_abbrev(participant.condition)} Booster {n}'
-        content = "UO: Booster session"
-        events.append(Event(time=t, title=title, content=content))
-        n = n + 1
-
-    # Add daily diary round 2 messages
-    round2_start = get_datetime(participant.quit_date,
-                                participant.sleep_time,
-                                timedelta(weeks=4, hours=-2))
-    round2_dates = get_diary_dates(round2_start)
-    for day, date in enumerate(round2_dates):
-        content = f'UO: Daily Diary #{day + 5}'
-        title = f'ASH Daily Diary #{day + 5}'
-        events.append(Event(time=date, title=title, content=content))
-
     if len(events) > 0:
         apptoto_events = []
-        for e in events:
+        for e in sorted(events):
             apptoto_events.append(ApptotoEvent(calendar=config['apptoto_calendar'],
                                                title=e.title,
                                                start_time=e.time,

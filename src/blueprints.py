@@ -81,6 +81,7 @@ def diary2():
     logger.info(m)
     return 'success'
 
+
 @bp.route('/messages', methods=['POST'])
 def generate_messages():
     participant = get_participant()
@@ -188,13 +189,12 @@ def progress():
     daily_messages = [x.split('  ')[-1] for x in reversed(lines)
                       if isisoformat(x.split()[0]) and date.fromisoformat(x.split()[0]) == date.today()]
 
-#    daily_messages = list(reversed(lines))
+    #    daily_messages = list(reversed(lines))
     return flask.render_template('progress.html', messages=daily_messages)
 
 
 @bp.route('/')
 def index():
-
     return flask.render_template('index.html')
 
 
