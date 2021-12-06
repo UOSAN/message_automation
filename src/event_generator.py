@@ -195,16 +195,11 @@ def generate_messages(config, participant, instance_path):
     wake_time = time.fromisoformat(participant.wake_time)
     sleep_time = time.fromisoformat(participant.sleep_time)
 
-    s = get_datetime(participant.quit_date, participant.wake_time)
-    e = get_datetime(participant.quit_date, participant.sleep_time)
-    hour_before_sleep_time = e - timedelta(seconds=3600)
-    three_hours_before_sleep_time = e - timedelta(hours=3)
-
     Event = namedtuple('Event', ['time', 'title', 'content'])
 
     # Add quit_message_date date boosters 3 hrs after wake time
     message_datetime = datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
-    events.append(Event(time=message_datetime, title='UO: Day Before', content='UO: Day Before'))
+    events.append(Event(time=message_datetime, title='UO: Day Before', content='UO: Day Before Quitting'))
     message_datetime = datetime.combine(quit_date, wake_time) + timedelta(hours=3)
     events.append(Event(time=message_datetime, title='UO: Quit Date', content='UO: Quit Date'))
 
