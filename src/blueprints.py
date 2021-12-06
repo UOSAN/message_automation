@@ -88,13 +88,11 @@ def generate_messages():
     if not participant:
         return 'none'
 
-    key = ('generate {}'.format(participant.participant_id))
-
     try:
-        future_response = executor.submit_stored(key, eg.generate_messages,
-                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                                 participant=participant,
-                                                 instance_path=flask.current_app.instance_path)
+        future_response = executor.submit(eg.generate_messages,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          participant=participant,
+                                          instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
     except Exception as err:
         logger.error(str(err))
@@ -112,12 +110,10 @@ def delete_events():
     if not participant:
         return 'none'
 
-    key = ('delete {}'.format(participant.participant_id))
-
     try:
-        future_response = executor.submit_stored(key, eg.delete_messages,
-                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                                 participant=participant)
+        future_response = executor.submit(eg.delete_messages,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          participant=participant)
         future_response.add_done_callback(done)
     except ValueError as err:
         logger.error(str(err))
@@ -153,14 +149,11 @@ def responses():
     participant = get_participant()
     if not participant:
         return 'none'
-
-    key = ('conversations {}'.format(participant.participant_id))
-
     try:
-        future_response = executor.submit_stored(key, eg.get_conversations,
-                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                                 participant=participant,
-                                                 instance_path=flask.current_app.instance_path)
+        future_response = executor.submit(eg.get_conversations,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          participant=participant,
+                                          instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
 
     except ValueError as err:
