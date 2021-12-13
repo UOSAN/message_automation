@@ -8,7 +8,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 from src.constants import MAX_EVENTS
-from src.logging import DEFAULT_LOGGING
+from src.mylogging import DEFAULT_LOGGING
 
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)

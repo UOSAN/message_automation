@@ -7,7 +7,7 @@ import flask
 
 import src.event_generator as eg
 from src.redcap import Redcap, RedcapError
-from src.logging import DEFAULT_LOGGING
+from src.mylogging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
 

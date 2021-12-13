@@ -6,7 +6,7 @@ from typing import Dict, List
 import logging.config
 import pandas as pd
 
-from src.logging import DEFAULT_LOGGING
+from src.mylogging import DEFAULT_LOGGING
 from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant
 from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition
