@@ -48,14 +48,31 @@ def get_participant():
     return participant
 
 
-@bp.route('/diary', methods=['POST'])
-def diary():
+@bp.route('/diary1', methods=['POST'])
+def diary1():
     participant = get_participant()
     if not participant:
         return 'none'
 
     try:
-        m = eg.daily_diary(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        m = eg.daily_diary_one(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+
+    except Exception as err:
+        logger.error(str(err))
+        return str(err)
+
+    logger.info(m)
+    return 'success'
+
+
+@bp.route('/diary3', methods=['POST'])
+def diary2():
+    participant = get_participant()
+    if not participant:
+        return 'none'
+
+    try:
+        m = eg.daily_diary_three(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
 
     except Exception as err:
         logger.error(str(err))
@@ -71,13 +88,11 @@ def generate_messages():
     if not participant:
         return 'none'
 
-    key = ('generate {}'.format(participant.participant_id))
-
     try:
-        future_response = executor.submit_stored(key, eg.generate_messages,
-                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                                 participant=participant,
-                                                 instance_path=flask.current_app.instance_path)
+        future_response = executor.submit(eg.generate_messages,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          participant=participant,
+                                          instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
     except Exception as err:
         logger.error(str(err))
@@ -95,12 +110,10 @@ def delete_events():
     if not participant:
         return 'none'
 
-    key = ('delete {}'.format(participant.participant_id))
-
     try:
-        future_response = executor.submit_stored(key, eg.delete_messages,
-                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                                 participant=participant)
+        future_response = executor.submit(eg.delete_messages,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          participant=participant)
         future_response.add_done_callback(done)
     except ValueError as err:
         logger.error(str(err))
@@ -136,14 +149,11 @@ def responses():
     participant = get_participant()
     if not participant:
         return 'none'
-
-    key = ('conversations {}'.format(participant.participant_id))
-
     try:
-        future_response = executor.submit_stored(key, eg.get_conversations,
-                                                 config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                                 participant=participant,
-                                                 instance_path=flask.current_app.instance_path)
+        future_response = executor.submit(eg.get_conversations,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          participant=participant,
+                                          instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
 
     except ValueError as err:
@@ -172,13 +182,12 @@ def progress():
     daily_messages = [x.split('  ')[-1] for x in reversed(lines)
                       if isisoformat(x.split()[0]) and date.fromisoformat(x.split()[0]) == date.today()]
 
-#    daily_messages = list(reversed(lines))
+    #    daily_messages = list(reversed(lines))
     return flask.render_template('progress.html', messages=daily_messages)
 
 
 @bp.route('/')
 def index():
-
     return flask.render_template('index.html')
 
 
