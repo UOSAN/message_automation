@@ -101,6 +101,7 @@ class Apptoto:
 
         :param events: List of events to create
         """
+        return 'done' # test modd
         url = f'{self._endpoint}/events'
 
         # Post num_events events at a time because Apptoto's API can't handle all events at once.

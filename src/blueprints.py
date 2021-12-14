@@ -6,7 +6,7 @@ from datetime import date
 import flask
 
 import src.event_generator as eg
-from src.redcap import Redcap, RedcapError
+from src.participant import Subject
 from src.mylogging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
@@ -33,29 +33,28 @@ def done(fn):
                 logger.info(result)
 
 
-# get participant object from id in form
-def get_participant():
-    participant_id = flask.request.form['participant']
-    if len(participant_id) != 6 or not participant_id.startswith('ASH'):
-        logger.warning(f'Warning: {participant_id} is not in the form \"ASHnnn\"')
+# get subject object from id in form
+def get_subject():
+    subject_id = flask.request.form['participant']
+    if len(subject_id) != 6 or not subject_id.startswith('ASH'):
+        logger.warning(f'Warning: {subject_id} is not in the form \"ASHnnn\"')
 
-    rc = Redcap(api_token=flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
     try:
-        participant = rc.get_participant(participant_id)
-    except RedcapError as err:
+        subject = Subject(subject_id, flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    except Exception as err:
         logger.error(str(err))
         return None
-    return participant
+    return subject
 
 
 @bp.route('/diary1', methods=['POST'])
 def diary1():
-    participant = get_participant()
-    if not participant:
+    subject = get_subject()
+    if not subject:
         return 'none'
 
     try:
-        m = eg.daily_diary_one(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        m = eg.daily_diary_one(config=flask.current_app.config['AUTOMATIONCONFIG'], subject=subject)
 
     except Exception as err:
         logger.error(str(err))
@@ -67,12 +66,12 @@ def diary1():
 
 @bp.route('/diary3', methods=['POST'])
 def diary2():
-    participant = get_participant()
-    if not participant:
+    subject = get_subject()
+    if not subject:
         return 'none'
 
     try:
-        m = eg.daily_diary_three(config=flask.current_app.config['AUTOMATIONCONFIG'], participant=participant)
+        m = eg.daily_diary_three(config=flask.current_app.config['AUTOMATIONCONFIG'], subject=subject)
 
     except Exception as err:
         logger.error(str(err))
@@ -84,42 +83,42 @@ def diary2():
 
 @bp.route('/messages', methods=['POST'])
 def generate_messages():
-    participant = get_participant()
-    if not participant:
+    subject = get_subject()
+    if not subject:
         return 'none'
 
     try:
         future_response = executor.submit(eg.generate_messages,
                                           config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                          participant=participant,
+                                          subject=subject,
                                           instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
     except Exception as err:
         logger.error(str(err))
         return str(err)
 
-    status = f'Message generation started for {participant.participant_id}'
+    status = f'Message generation started for {subject.id}'
     logger.info(status)
     return status
 
 
 @bp.route('/delete', methods=['POST'])
 def delete_events():
-    # Access form properties, get participant information, get events, and delete
-    participant = get_participant()
-    if not participant:
+    # Access form properties, get subject information, get events, and delete
+    subject = get_subject()
+    if not subject:
         return 'none'
 
     try:
         future_response = executor.submit(eg.delete_messages,
                                           config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                          participant=participant)
+                                          subject=subject)
         future_response.add_done_callback(done)
     except ValueError as err:
         logger.error(str(err))
         return str(err)
 
-    status = f'Message deletion started for {participant.participant_id}'
+    status = f'Message deletion started for {subject.id}'
     logger.info(status)
 
     return status
@@ -127,13 +126,13 @@ def delete_events():
 
 @bp.route('/task', methods=['POST'])
 def task():
-    participant = get_participant()
-    if not participant:
+    subject = get_subject()
+    if not subject:
         return 'none'
 
     try:
         m = eg.generate_task_files(config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                   participant=participant,
+                                   subject=subject,
                                    instance_path=flask.current_app.instance_path)
 
     except Exception as err:
@@ -146,13 +145,13 @@ def task():
 
 @bp.route('/responses', methods=['POST'])
 def responses():
-    participant = get_participant()
-    if not participant:
+    subject = get_subject()
+    if not subject:
         return 'none'
     try:
         future_response = executor.submit(eg.get_conversations,
                                           config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                          participant=participant,
+                                          subject=subject,
                                           instance_path=flask.current_app.instance_path)
         future_response.add_done_callback(done)
 
@@ -160,7 +159,7 @@ def responses():
         logger.error(str(err))
         return str(err)
 
-    status = f'Retrieving conversations for {participant.participant_id}'
+    status = f'Retrieving conversations for {subject.id}'
     logger.info(status)
     return status
 
@@ -182,7 +181,6 @@ def progress():
     daily_messages = [x.split('  ')[-1] for x in reversed(lines)
                       if isisoformat(x.split()[0]) and date.fromisoformat(x.split()[0]) == date.today()]
 
-    #    daily_messages = list(reversed(lines))
     return flask.render_template('progress.html', messages=daily_messages)
 
 
@@ -193,26 +191,26 @@ def index():
 
 @bp.route('/validate', methods=['POST'])
 def validate():
-    participant = get_participant()
-    if participant:
-        logger.info(f'{participant.participant_id} found in RedCap')
-        if not all(vars(participant).values()):
-            missing = ', '.join([x for x in vars(participant) if not vars(participant)[x]])
-            logger.error(f'{participant.participant_id} is missing information: {missing}')
-        return participant.participant_id
+    subject = get_subject()
+    if subject:
+        logger.info(f'{subject.id} found in RedCap')
+#        if not all(vars(subject).values()):
+#            missing = ', '.join([x for x in vars(subject) if not vars(subject)[x]])
+#            logger.error(f'{subject.id} is missing information: {missing}')
+        return subject.id
     else:
         return 'none'
 
 
 @bp.route('/files', methods=['POST'])
 def download_files():
-    participant = get_participant()
-    if not participant:
+    subject = get_subject()
+    if not subject:
         return 'none'
     csv_path = Path(DOWNLOAD_DIR)
-    csvfiles = csv_path.glob(f'*{participant.participant_id}*.csv')
+    csvfiles = csv_path.glob(f'*{subject.id}*.csv')
     compression = zipfile.ZIP_STORED
-    archive_name = f'{participant.participant_id}.zip'
+    archive_name = f'{subject.id}.zip'
     with zipfile.ZipFile(Path.home() / archive_name, mode='w', compression=compression) as zf:
         for f in csvfiles:
             zf.write(f, arcname=f.name, compress_type=compression)
