@@ -1,3 +1,6 @@
+# this is pycap, not the redcap class originally written for this project
+import redcap
+
 class Participant:
     def __init__(self, identifier: str = '', phone: str = ''):
         """
@@ -22,4 +25,14 @@ class Participant:
         self.task_values = []
 
 
-
+class NewParticipant:
+    def __init__(self, redcap_token, subject_id):
+        project = redcap.Project(url='https://redcap.uoregon.edu/api/',
+                                 token=redcap_token)
+        data = project.export_records(events=['session_0_arm_1',
+                                              'session_1_arm_2',
+                                              'session_2_arm_1'],
+                                      format='df')
+        self.record = data.loc[subject_id].rename(index={'session_0_arm_1': 's0',
+                                                         'session_1_arm_2': 's1',
+                                                         'session_2_arm_1': 's2'})

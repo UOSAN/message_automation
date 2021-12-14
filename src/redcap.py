@@ -1,7 +1,6 @@
 from typing import Dict
-import pprint
 import requests
-
+import pprint
 from src.enums import Condition, CodedValues
 from src.participant import Participant
 
@@ -25,6 +24,7 @@ def _get_record(json, participant_id: str):
     except StopIteration:
         record = None
 
+    pprint.pprint(record)
     return record
 
 

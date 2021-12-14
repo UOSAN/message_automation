@@ -44,11 +44,6 @@ ITI = [
 ]
 
 
-def get_datetime(isodate, isotime, offset=timedelta(0)):
-    dt = datetime.strptime(f'{isodate} {isotime}', '%Y-%m-%d %H:%M')
-    return dt + offset
-
-
 # Get dates for diary messages, always including at least one weekend day
 def get_diary_dates(start_date: date, number_of_days=4):
     dates = [start_date + timedelta(days=d) for d in range(0, number_of_days)]
