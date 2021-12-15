@@ -44,6 +44,13 @@ ITI = [
 ]
 
 
+def check_fields(subject, required_fields):
+    if subject.redcap.s0[required_fields].isnull().any():
+        missing = [x for x in required_fields if pd.isnull(subject.redcap.s0[x])]
+        missing_text = ', '.join(missing)
+        raise Exception(f'Missing required redcap data for {subject.id}: {missing_text}')
+
+
 # Get dates for diary messages, always including at least one weekend day
 def get_diary_dates(start_date: date, number_of_days=4):
     dates = [start_date + timedelta(days=d) for d in range(0, number_of_days)]
@@ -95,10 +102,7 @@ def daily_diary_one(config: Dict[str, str], subject: Subject):
     :return:
     """
     # first check that we have the required info from redcap
-    required_fields = ['initials', 'phone', 'sleeptime']
-
-    if subject.redcap.s0[required_fields].isnull().any():
-        return f'Missing required redcap data for {subject.id}'
+    check_fields(subject, ['initials', 'phone', 'sleeptime'])
 
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
@@ -134,10 +138,9 @@ def daily_diary_three(config: Dict[str, str], subject: Subject):
     :return:
     """
     # first check that we have the required info from redcap
-    required_fields = ['initials', 'phone', 'sleeptime']
-    if subject.redcap.s0[required_fields].isnull().any():
-        return f'Missing required redcap data for {subject.id}'
-    if not subject.redcap.get('s2') or pd.isnull(subject.redcap.s2.date_s2):
+    check_fields(subject, ['initials', 'phone', 'sleeptime'])
+
+    if 's2' not in subject.redcap or pd.isnull(subject.redcap.s2.date_s2):
         return f'Missing session2 date for {subject.id}'
 
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
@@ -175,11 +178,9 @@ def generate_messages(config, subject, instance_path):
     :return:
     """
     # first check that we have the required info from redcap
-    required_fields = ['value1_s0', 'value2_s0', 'initials', 'phone',
-                       'sleeptime', 'waketime', 'quitdate']
+    check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
+                           'sleeptime', 'waketime', 'quitdate'])
 
-    if subject.redcap.s0[required_fields].isnull().any():
-        return f'Missing required redcap data for {subject.id}'
 
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
@@ -299,10 +300,7 @@ def generate_messages(config, subject, instance_path):
 
 def generate_task_files(config, subject, instance_path):
     # first check that we have the required info from redcap
-    required_fields = ['value1_s0', 'value7_s0']
-
-    if subject.redcap.s0[required_fields].isnull().any():
-        return f'Missing required redcap data for {subject.id}'
+    check_fields(subject, ['value1_s0', 'value7_s0'])
 
     message_file = Path(instance_path) / config['message_file']
     csv_path = Path(DOWNLOAD_DIR)
