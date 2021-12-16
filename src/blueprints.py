@@ -200,6 +200,8 @@ def validate():
         for key in sessions:
             if key in subject.redcap:
                 logger.info(f'{sessions[key]} found')
+            else:
+                logger.info(f'{sessions[key]} not found')
 
         return subject.id
     else:
