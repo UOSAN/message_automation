@@ -140,8 +140,8 @@ def daily_diary_three(config: Dict[str, str], subject: Subject):
     # first check that we have the required info from redcap
     check_fields(subject, ['initials', 'phone', 'sleeptime'])
 
-    if 's2' not in subject.redcap or pd.isnull(subject.redcap.s2.date_s2):
-        return f'Missing session2 date for {subject.id}'
+    if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.training_end):
+        return f'Missing session1 training end date for {subject.id}'
 
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
@@ -152,7 +152,7 @@ def daily_diary_three(config: Dict[str, str], subject: Subject):
     events = []
 
     # Diary round 3
-    round3_start = date.fromisoformat(subject.redcap.s2.date_s2) + timedelta(weeks=6)
+    round3_start = date.fromisoformat(subject.redcap.s1.training_end) + timedelta(weeks=6)
     round3_dates = get_diary_dates(round3_start)
     sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
     for day, message_date in enumerate(round3_dates):

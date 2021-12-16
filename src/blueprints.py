@@ -194,9 +194,13 @@ def validate():
     subject = get_subject()
     if subject:
         logger.info(f'{subject.id} found in RedCap')
-#        if not all(vars(subject).values()):
-#            missing = ', '.join([x for x in vars(subject) if not vars(subject)[x]])
-#            logger.error(f'{subject.id} is missing information: {missing}')
+        sessions = dict(s0='Session 0',
+                        s1='Session 1',
+                        s2='Session 2')
+        for key in sessions:
+            if key in subject.redcap:
+                logger.info(f'{sessions[key]} found')
+
         return subject.id
     else:
         return 'none'
