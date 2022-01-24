@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Smoking study message generation</title>
+    <link rel="stylesheet" href="../static/bulma.css">
+</head>
+<body>
+  <div class="container scale-in-center">
+    <br><br>
+    <div><h1 class="title is-4">Smoking study message generation</h1></div>
+    <div class="content">
+        <form method="post" enctype="multipart/form-data" id="upload">
+        <!--  Participant ID -->
+        <br><br>
+        <div class="columns">
+            <div class="column is-one-fifth">
+                <label for="participant">Participant ID</label>
+            </div>
+            <div class="column is-one-fifth">
+                <input name="participant" id="participant" type="text">
+            </div>
+        </div>
+        </form>
+
+        <br><br>
+        <button id="validate" class="button is-link" >Validate ID</button>
+        <br><br>
+        <button id="diary1" class="button is-link" >Generate DD1</button>
+        <br><br>
+        <button id="task" class="button is-link" >Generate value task input</button>
+        <br><br>
+        <button id="messages" class="button is-link" >Generate intervention SMS and DD2</button>
+        <br><br>
+        <button id="diary3" class="button is-link" >Generate DD3</button>
+        <br><br>
+        <button id="responses" class="button is-link" >Get participant responses</button>
+        <br><br>
+        <button id="delete" class="button is-link" >Delete messages</button>
+        <br><br>
+        <button id="files" class="button is-link" >Download files for this subject</button>
+        <br><br>
+
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <ul class=flashes>
+          {% for category, message in messages %}
+          <li class="tag is-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+
+        <iframe id="progress"
+            title="thread progress"
+            width="100%"
+            height="400"
+            src="progress">
+        </iframe>
+    </div>
+  </div>
+</body>
+
+<script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', () => {
+         document.querySelectorAll('button').forEach(button => {
+            button.onclick = () => {
+                const request = new XMLHttpRequest();
+                request.open('POST', `/${button.id}`);
+
+                const form = document.getElementById( "upload" );
+                const formdata = new FormData(form);
+
+                // thank you stack overflow 22724070
+                if (button.id == "files") {
+                    request.responseType = "blob";
+                    function saveBlob(blob, fileName) {
+                        var a = document.createElement('a');
+                        a.href = window.URL.createObjectURL(blob);
+                        a.download = fileName;
+                        a.dispatchEvent(new MouseEvent('click'));
+                    }
+                    request.onload = function(e) {
+                        var blob = e.currentTarget.response;
+                        zipfile = document.getElementById('participant').value + '.zip'
+                        saveBlob(blob, zipfile);
+                        document.getElementById('progress').contentWindow.location.reload(true);
+                    }
+                }
+                else {
+                    request.onload = () => {
+                        document.getElementById('progress').contentWindow.location.reload(true);
+                    }
+                }
+
+                request.send(formdata);
+
+            };
+         });
+    });
+
+
+
+
+</script>
+
+<script src="http://code.jquery.com/jquery-3.1.1.js"></script>
+
+
+
+<!--  periodically refresh progress log  -->
+<script type="text/javascript">
+    function doRefresh(){
+        document.getElementById('progress').contentWindow.location.reload(true);
+    }
+    setInterval(doRefresh, 5000);
+</script>
+
+</html>

@@ -16,3 +16,4 @@ class CodedValues(Enum):
     physical = 6
     athletic = 7
     none = 8
+
