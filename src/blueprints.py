@@ -1,158 +1,223 @@
-from datetime import datetime
-from typing import Optional, List
+from pathlib import Path
+import logging.config
+import zipfile
+from datetime import date
 
-from flask import (
-    Blueprint, current_app, flash, make_response, render_template, request, send_file
-)
-from flask.json import jsonify
-from werkzeug.datastructures import ImmutableMultiDict
+import flask
 
-from src.apptoto import Apptoto
-from src.event_generator import EventGenerator
-from src.redcap import Redcap, RedcapError
+import src.event_generator as eg
+from src.participant import Subject
+from src.mylogging import DEFAULT_LOGGING
+from src.executor import executor
+from src.constants import DOWNLOAD_DIR
 
-bp = Blueprint('blueprints', __name__)
+bp = flask.Blueprint('blueprints', __name__)
+auto_bp = flask.Blueprint('auto_bp', __name__)
+if not Path(DOWNLOAD_DIR).exists():
+    Path(DOWNLOAD_DIR).mkdir()
 
-
-def _validate_participant_id(form_data: ImmutableMultiDict) -> Optional[List[str]]:
-    errors = []
-    if len(form_data['participant']) != 6 or not form_data['participant'].startswith('ASH'):
-        errors.append('Participant identifier must be in form \"ASHnnn\"')
-
-    if errors:
-        return errors
-    else:
-        return None
+logging.config.dictConfig(DEFAULT_LOGGING)
+logger = logging.getLogger(__name__)
 
 
-@bp.route('/diary', methods=['GET', 'POST'])
-def diary_form():
-    if request.method == 'GET':
-        return render_template('daily_diary_form.html')
-    elif request.method == 'POST':
-        if 'submit' in request.form:
-            # Access form properties and do stuff
-            error = _validate_participant_id(request.form)
-            if error:
-                for e in error:
-                    flash(e, 'danger')
-                return render_template('daily_diary_form.html')
-
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-            try:
-                part = rc.get_session_0(request.form['participant'])
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return render_template('daily_diary_form.html')
-
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
-                                instance_path=current_app.instance_path)
-            if not eg.daily_diary():
-                flash('Failed to create daily diary round 1', 'danger')
-            return render_template('daily_diary_form.html')
+def done(fn):
+    if fn.cancelled():
+        logger.info('Operation cancelled')
+    elif fn.done():
+        error = fn.exception()
+        if error:
+            logger.error('Error returned: {}'.format(error))
+        else:
+            result = fn.result()
+            if result:
+                logger.info(result)
 
 
-@bp.route('/', methods=['GET', 'POST'])
-def generation_form():
-    if request.method == 'GET':
-        return render_template('generation_form.html')
-    elif request.method == 'POST':
-        if 'submit' in request.form:
-            # Access form properties and do stuff
-            error = _validate_participant_id(request.form)
-            if error:
-                for e in error:
-                    flash(e, 'danger')
-                return render_template('generation_form.html')
-
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-            try:
-                part = rc.get_participant_specific_data(request.form['participant'])
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return render_template('generation_form.html')
-
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
-                                instance_path=current_app.instance_path)
-            if eg.generate():
-                f = eg.write_file()
-                return send_file(f, mimetype='text/csv', as_attachment=True)
-            else:
-                flash('Failed to create some messages', 'danger')
-            return render_template('generation_form.html')
-
-
-@bp.route('/delete', methods=['GET', 'POST'])
-def delete_events():
-    if request.method == 'GET':
-        return render_template('delete_form.html')
-    elif request.method == 'POST':
-        if 'submit' in request.form:
-            # Access form properties, get participant information, get events, and delete
-            participant_id = request.form['participant']
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-
-            try:
-                phone_number = rc.get_participant_phone(participant_id)
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return render_template('delete_form.html')
-
-            apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
-                              user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
-
-            begin = datetime.now()
-            event_ids = apptoto.get_events(begin=begin, phone_number=phone_number)
-            for event_id in event_ids:
-                apptoto.delete_event(event_id)
-
-            flash('Deleted messages', 'success')
-            return render_template('delete_form.html')
-
-
-@bp.route('/task', methods=['GET', 'POST'])
-def task():
-    if request.method == 'GET':
-        return render_template('task_form.html')
-    elif request.method == 'POST':
-        if 'value-task' in request.form:
-            error = _validate_participant_id(request.form)
-            if error:
-                for e in error:
-                    flash(e, 'danger')
-                return render_template('task_form.html')
-
-            rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-            try:
-                part = rc.get_participant_specific_data(request.form['participant'])
-            except RedcapError as err:
-                flash(str(err), 'danger')
-                return render_template('task_form.html')
-
-            eg = EventGenerator(config=current_app.config['AUTOMATIONCONFIG'], participant=part,
-                                instance_path=current_app.instance_path)
-
-            f = eg.task_input_file()
-            return send_file(f, mimetype='text/csv', as_attachment=True)
-
-
-@bp.route('/count/<participant_id>', methods=['GET'])
-def participant_responses(participant_id):
-    part = ImmutableMultiDict({'participant': participant_id})
-    error = _validate_participant_id(part)
-    if error:
-        return make_response((jsonify(error), 400))
-
-    # Use participant ID to get phone number, then get all events and filter conversations for participant responses.
-    rc = Redcap(api_token=current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+# get subject object from id in form
+def get_subject():
+    subject_id = flask.request.form['participant']
+    if len(subject_id) != 6 or not subject_id.startswith('ASH'):
+        logger.warning(f'Warning: {subject_id} is not in the form \"ASHnnn\"')
 
     try:
-        phone_number = rc.get_participant_phone(participant_id)
-    except RedcapError as err:
-        return make_response((jsonify(str(err)), 404))
+        subject = Subject(subject_id, flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+    except Exception as err:
+        logger.error(str(err))
+        return None
+    return subject
 
-    apptoto = Apptoto(api_token=current_app.config['AUTOMATIONCONFIG']['apptoto_api_token'],
-                      user=current_app.config['AUTOMATIONCONFIG']['apptoto_user'])
 
-    conversations = apptoto.get_conversations(phone_number=phone_number)
-    return make_response(jsonify(conversations), 200)
+@bp.route('/diary1', methods=['POST'])
+def diary1():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+
+    try:
+        m = eg.daily_diary_one(config=flask.current_app.config['AUTOMATIONCONFIG'], subject=subject)
+
+    except Exception as err:
+        logger.error(str(err))
+        return str(err)
+
+    logger.info(m)
+    return 'success'
+
+
+@bp.route('/diary3', methods=['POST'])
+def diary2():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+
+    try:
+        m = eg.daily_diary_three(config=flask.current_app.config['AUTOMATIONCONFIG'], subject=subject)
+
+    except Exception as err:
+        logger.error(str(err))
+        return str(err)
+
+    logger.info(m)
+    return 'success'
+
+
+@bp.route('/messages', methods=['POST'])
+def generate_messages():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+
+    try:
+        future_response = executor.submit(eg.generate_messages,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          subject=subject,
+                                          instance_path=flask.current_app.instance_path)
+        future_response.add_done_callback(done)
+    except Exception as err:
+        logger.error(str(err))
+        return str(err)
+
+    status = f'Message generation started for {subject.id}'
+    logger.info(status)
+    return status
+
+
+@bp.route('/delete', methods=['POST'])
+def delete_events():
+    # Access form properties, get subject information, get events, and delete
+    subject = get_subject()
+    if not subject:
+        return 'none'
+
+    try:
+        future_response = executor.submit(eg.delete_messages,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          subject=subject)
+        future_response.add_done_callback(done)
+    except ValueError as err:
+        logger.error(str(err))
+        return str(err)
+
+    status = f'Message deletion started for {subject.id}'
+    logger.info(status)
+
+    return status
+
+
+@bp.route('/task', methods=['POST'])
+def task():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+
+    try:
+        m = eg.generate_task_files(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                   subject=subject,
+                                   instance_path=flask.current_app.instance_path)
+
+    except Exception as err:
+        logger.error(str(err))
+        return str(err)
+
+    logger.info(m)
+    return m
+
+
+@bp.route('/responses', methods=['POST'])
+def responses():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+    try:
+        future_response = executor.submit(eg.get_conversations,
+                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
+                                          subject=subject,
+                                          instance_path=flask.current_app.instance_path)
+        future_response.add_done_callback(done)
+
+    except ValueError as err:
+        logger.error(str(err))
+        return str(err)
+
+    status = f'Retrieving conversations for {subject.id}'
+    logger.info(status)
+    return status
+
+
+def isisoformat(item):
+    try:
+        date.fromisoformat(item)
+    except ValueError:
+        return False
+    return True
+
+
+@bp.route('/progress', methods=['GET'])
+def progress():
+    logfile = DEFAULT_LOGGING['handlers']['rotating_file']['filename']
+    with open(logfile, 'r') as f:
+        lines = f.readlines()
+
+    daily_messages = [x.split('  ')[-1] for x in reversed(lines)
+                      if isisoformat(x.split()[0]) and date.fromisoformat(x.split()[0]) == date.today()]
+
+    return flask.render_template('progress.html', messages=daily_messages)
+
+
+@bp.route('/')
+def index():
+    return flask.render_template('index.html')
+
+
+@bp.route('/validate', methods=['POST'])
+def validate():
+    subject = get_subject()
+    if subject:
+        logger.info(f'{subject.id} found in RedCap')
+        sessions = dict(s0='Session 0',
+                        s1='Session 1',
+                        s2='Session 2')
+        for key in sessions:
+            if key in subject.redcap:
+                logger.info(f'{sessions[key]} found')
+            else:
+                logger.info(f'{sessions[key]} not found')
+
+        return subject.id
+    else:
+        return 'none'
+
+
+@bp.route('/files', methods=['POST'])
+def download_files():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+    csv_path = Path(DOWNLOAD_DIR)
+    csvfiles = csv_path.glob(f'*{subject.id}*.csv')
+    compression = zipfile.ZIP_STORED
+    archive_name = f'{subject.id}.zip'
+    with zipfile.ZipFile(Path.home() / archive_name, mode='w', compression=compression) as zf:
+        for f in csvfiles:
+            zf.write(f, arcname=f.name, compress_type=compression)
+    return flask.send_from_directory(Path.home(), archive_name, as_attachment=True)

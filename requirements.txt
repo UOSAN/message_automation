@@ -2,4 +2,7 @@ requests
 jsonpickle
 flask
 Werkzeug
+pandas
+flask-executor
+pycap
 -r tests/requirements.txt
