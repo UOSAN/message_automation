@@ -174,7 +174,7 @@ def daily_diary_three(config: Dict[str, str], subject: Subject):
 def generate_messages(config, subject, instance_path):
     """
     Generate events for intervention messages, messages about daily cigarette usage,
-    messages for boosters, daily diary rounds 2, 3 and 4.
+    messages for boosters, daily diary rounds 2.
     :return:
     """
     # first check that we have the required info from redcap
