@@ -181,7 +181,6 @@ def generate_messages(config, subject, instance_path):
     check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
                            'sleeptime', 'waketime', 'quitdate'])
 
-
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
 
@@ -338,32 +337,27 @@ def get_conversations(config, subject, instance_path):
                                             'calendar_id',
                                             ['participants', 'event_id']])
 
+    csv_path = Path(DOWNLOAD_DIR)
+
     conversations = conversations[conversations.calendar_id == ASH_CALENDAR_ID]
     conversations['start_time'] = pd.to_datetime(conversations['start_time'])
 
-    sent = conversations[conversations.event_type == 'sent']
-    sent = sent.sort_values('id').groupby(['participants.event_id']).first()
     message_file = Path(instance_path) / config['message_file']
     messages = pd.read_csv(message_file, dtype=str)
     messages['content'] = 'UO: ' + messages.Message
-    sent = sent.merge(messages, on='content', how='left').set_index('start_time')
-    replied = conversations[conversations.event_type == 'replied'].set_index('start_time')
+    conversations = conversations.merge(messages, on='content', how='left').set_index('id')
 
-    all_convos = sent.join(replied['content'], rsuffix='_reply')
-    sms_convos = all_convos[all_convos.title.str.contains(SMS_TITLE)]
+    sms_convos = conversations[conversations.title.str.contains(SMS_TITLE)]
 
-    csv_path = Path(DOWNLOAD_DIR)
     sms_name = csv_path / f'{subject.id}_sms_conversations.csv'
 
-    sms_convos.to_csv(sms_name, date_format='%x %X',
-                      columns=['UO_ID', 'content', 'content_reply'],
-                      header=['UO_ID', 'Sent', 'Reply'])
+    columns = ['at', 'event_type',  'UO_ID', 'content', 'title',
+               'delivery_state', 'delivery_error', 'delivery_failed', 'send_failed']
+    sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns)
 
-    cig_convos = all_convos[all_convos.title.str.contains(CIGS_TITLE)]
+    cig_convos = conversations[conversations.title.str.contains(CIGS_TITLE)]
     cig_name = csv_path / f'{subject.id}_cig_conversations.csv'
-    cig_convos.to_csv(cig_name, date_format='%x %X',
-                      columns=['UO_ID', 'content', 'content_reply'],
-                      header=['UO_ID', 'Sent', 'Reply'])
+    cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns)
 
     return f'Conversations written to {sms_name.name} and {cig_name.name}'
 
@@ -389,3 +383,19 @@ def delete_messages(config, subject):
         logger.info('Deleted event {}, {} of {}'.format(event_id, deleted, len(event_ids)))
 
     return f'Deleted {len(event_ids)} messages for {subject.id}'
+
+
+def update_events(config, subject):
+    apptoto = Apptoto(api_token=config['apptoto_api_token'],
+                      user=config['apptoto_user'])
+    begin = datetime.now()
+
+    print('search by phone')
+    events = apptoto.get_events(begin=begin.isoformat(), phone_number=subject.redcap.s0.phone)
+    print([e['id'] for e in events])
+    print([e['content'] for e in events])
+    print([e['start_time'] for e in events])
+
+    print('search by email')
+    events = apptoto.get_events(begin=begin.isoformat(), email_address=subject.redcap.s0.email)
+    print([e['id'] for e in events])
