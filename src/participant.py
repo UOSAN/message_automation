@@ -1,5 +1,6 @@
 # this is pycap, not the redcap class originally written for this project
 import redcap
+from src.apptoto import Apptoto
 
 
 class Subject:

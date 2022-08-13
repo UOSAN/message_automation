@@ -15,13 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class ApptotoParticipant:
-    def __init__(self, name: str, phone: str, email: str = ''):
+    def __init__(self, name, phone, email=''):
         """
         Create an ApptotoParticipant.
 
         An ApptotoParticipant represents a single participant on an ApptotoEvent.
         This participant will receive messages via email or phone.
-
         :param str name: Participant name
         :param str phone: Participant phone number
         :param str email: Participant email
@@ -29,9 +28,6 @@ class ApptotoParticipant:
         self.name = name
         self.phone = phone
         self.email = email
-
-    def __str__(self):
-        return '{} {} {}'.format(self.name, self.phone, self.email)
 
 
 class ApptotoEvent:
@@ -50,6 +46,7 @@ class ApptotoEvent:
         :param datetime end_time: End time of event (default = same as start_time)
         :param str content: Message content about event
         :param List[ApptotoParticipants] participants: Participants who will receive message content
+
         """
         self.calendar = calendar
         self.title = title
@@ -61,10 +58,6 @@ class ApptotoEvent:
         self.content = content
 
         self.participants = participants
-
-    def __str__(self):
-        return '{} {} {} {} {} {}'.format(self.calendar, self.title, self.participants, self.start_time,
-                                          self.end_time, self.content)
 
 
 class ApptotoError(Exception):
@@ -95,7 +88,7 @@ class Apptoto:
         self._request_limit = 0.6
         self._last_request_time = time.time()
 
-    def post_events(self, events: List[ApptotoEvent]):
+    def post_events(self, events: list):
         """
         Post events to the /v1/events API to create events that will send messages to all participants.
 
@@ -170,6 +163,10 @@ class Apptoto:
         page = 0
 
         kwargs['page_size'] = MAX_EVENTS
+
+        # this is just for while I'm working on things.
+        # otherwise sometimes I mess up and retrieve EVERYTHING and it's a pain
+        max_to_retrieve = 1000
         while True:
             page += 1
             kwargs['page'] = page
@@ -201,5 +198,95 @@ class Apptoto:
                 logger.info('Found {} events'.format(len(events)))
             else:
                 break
+
+            if len(events) > max_to_retrieve:
+                break
+
+        return events
+
+    # ex: get_contact(external_id='TAG999')
+    def get_contact(self, **kwargs):
+        url = f'{self._endpoint}/contact'
+
+        r = requests.get(url=url,
+                         params=kwargs,
+                         headers=self._headers,
+                         timeout=self._timeout,
+                         auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        if r.status_code == requests.codes.ok:
+            return r.json()
+        else:
+            raise ApptotoError('Failed to get contact: {}'.format(r.status_code))
+
+    def post_contact(self, contact):
+        """
+        Create contact in /v1/contacts API
+        :param contact: contact to create
+        :contact must include name, address_book
+        :see apptoto api docs for full info
+        """
+        url = f'{self._endpoint}/contacts'
+
+        request_data = jsonpickle.encode({'contacts': [contact]}, unpicklable=False)
+        logger.info(f'Posting contact {contact.name}to apptoto')
+
+        while (time.time() - self._last_request_time) < self._request_limit:
+            time.sleep(0.1)
+
+        r = requests.post(url=url,
+                          data=request_data,
+                          headers=self._headers,
+                          timeout=self._timeout,
+                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        self._last_request_time = time.time()
+
+        if r.status_code != requests.codes.ok:
+            logger.error(f'Failed to post contact - {str(r.status_code)} - {str(r.content)}')
+            raise ApptotoError('Failed to post contact: {}'.format(r.status_code))
+
+    def put_contact(self, contact):
+        """
+        Update or create contact in /v1/contacts API
+        :param contact: contact to update
+        must include id or external_id to update existing contact
+        see apptoto api docs for full info
+        """
+        url = f'{self._endpoint}/contacts'
+
+        request_data = jsonpickle.encode({'contacts': [contact]}, unpicklable=False)
+        logger.info('Updating contact {} in apptoto'.format(contact['name']))
+
+        while (time.time() - self._last_request_time) < self._request_limit:
+            time.sleep(0.1)
+
+        r = requests.put(url=url,
+                         data=request_data,
+                         headers=self._headers,
+                         timeout=self._timeout,
+                         auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        self._last_request_time = time.time()
+
+        if r.status_code != requests.codes.ok:
+            logger.error(f'Failed to post contact - {str(r.status_code)} - {str(r.content)}')
+            raise ApptotoError('Failed to post contact: {}'.format(r.status_code))
+
+    def get_events_by_contact(self, begin: datetime, external_id: str,
+                              calendar_id=None, include_conversations=False):
+        contact = self.get_contact(external_id=external_id)
+        phone_numbers = [p.get('normalized') for p in contact.get('phone_numbers')]
+        email_addresses = [e.get('address') for e in contact.get('email_addresses')]
+        events = []
+        for phone in phone_numbers:
+            events.extend(self.get_events(begin=begin.isoformat(), phone_number=phone,
+                                          include_conversations=include_conversations))
+        for email in email_addresses:
+            events.extend(self.get_events(begin=begin.isoformat(), email_address=email,
+                                          include_conversations=include_conversations))
+
+        if calendar_id:
+            events = [e for e in events if e.get('calendar_id') == calendar_id]
 
         return events

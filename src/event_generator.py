@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Dict, List
 import logging.config
 import pandas as pd
+import re
 
 from src.mylogging import DEFAULT_LOGGING
-from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant
+from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant, ApptotoError
 from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition, CodedValues
 from src.participant import Subject
@@ -42,6 +43,14 @@ ITI = [
     2.1,
     1.0
 ]
+
+
+def normalize_phone(phone):
+    phone = phone.lstrip('+1')
+    phone = re.sub("[ ()-]", '', phone)  # remove space, (), -
+    assert (len(phone) == 10)
+    phone = f"+1{phone}"
+    return phone
 
 
 def check_fields(subject, required_fields):
@@ -102,12 +111,13 @@ def daily_diary_one(config: Dict[str, str], subject: Subject):
     :return:
     """
     # first check that we have the required info from redcap
-    check_fields(subject, ['initials', 'phone', 'sleeptime'])
+    check_fields(subject, ['initials', 'phone', 'sleeptime', 'email', 'date_s0'])
 
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
-    participants = [ApptotoParticipant(subject.redcap.s0.initials,
-                                       subject.redcap.s0.phone)]
+    participants = [ApptotoParticipant(subject.id,
+                                       subject.redcap.s0.phone,
+                                       subject.redcap.s0.email)]
 
     events = []
 
@@ -138,7 +148,7 @@ def daily_diary_three(config: Dict[str, str], subject: Subject):
     :return:
     """
     # first check that we have the required info from redcap
-    check_fields(subject, ['initials', 'phone', 'sleeptime'])
+    check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
 
     if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.training_end):
         return f'Missing session1 training end date for {subject.id}'
@@ -146,8 +156,9 @@ def daily_diary_three(config: Dict[str, str], subject: Subject):
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
 
-    participants = [ApptotoParticipant(subject.redcap.s0.initials,
-                                       subject.redcap.s0.phone)]
+    participants = [ApptotoParticipant(subject.id,
+                                       subject.redcap.s0.phone,
+                                       subject.redcap.s0.email)]
 
     events = []
 
@@ -179,13 +190,14 @@ def generate_messages(config, subject, instance_path):
     """
     # first check that we have the required info from redcap
     check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
-                           'sleeptime', 'waketime', 'quitdate'])
+                           'sleeptime', 'waketime', 'quitdate', 'email'])
 
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
 
-    participants = [ApptotoParticipant(subject.redcap.s0.initials,
-                                       subject.redcap.s0.phone)]
+    participants = [ApptotoParticipant(subject.id,
+                                       subject.redcap.s0.phone,
+                                       subject.redcap.s0.email)]
 
     events = []
     message_file = Path(instance_path) / config['message_file']
@@ -351,7 +363,7 @@ def get_conversations(config, subject, instance_path):
 
     sms_name = csv_path / f'{subject.id}_sms_conversations.csv'
 
-    columns = ['at', 'event_type',  'UO_ID', 'content', 'title',
+    columns = ['at', 'event_type', 'UO_ID', 'content', 'title',
                'delivery_state', 'delivery_error', 'delivery_failed', 'send_failed']
     sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns)
 
@@ -385,17 +397,76 @@ def delete_messages(config, subject):
     return f'Deleted {len(event_ids)} messages for {subject.id}'
 
 
-def update_events(config, subject):
+# get all future events for a subject, matching phone and email
+# Add or change phone & email to match redcap information
+def update_events(config, subject: Subject):
     apptoto = Apptoto(api_token=config['apptoto_api_token'],
                       user=config['apptoto_user'])
+
     begin = datetime.now()
+    events = apptoto.get_events_by_contact(begin, external_id=subject.id, calendar_id=ASH_CALENDAR_ID)
 
-    print('search by phone')
-    events = apptoto.get_events(begin=begin.isoformat(), phone_number=subject.redcap.s0.phone)
-    print([e['id'] for e in events])
-    print([e['content'] for e in events])
-    print([e['start_time'] for e in events])
+    e_df = pd.DataFrame.from_records(events)
+    e_df.drop_duplicates(subset='id', inplace=True)
 
-    print('search by email')
-    events = apptoto.get_events(begin=begin.isoformat(), email_address=subject.redcap.s0.email)
-    print([e['id'] for e in events])
+    e_df.rename(columns={'calendar_name': 'calendar'}, inplace=True)
+    e_df.drop(columns='is_deleted', inplace=True)
+
+    phone = normalize_phone(subject.redcap.s0.phone)
+    email = subject.redcap.s0.email
+
+    # check email, phone against new values
+    e_df['phone'] = [p[0]['normalized_phone'] for p in e_df.participants]
+    e_df['email'] = [p[0]['email'] for p in e_df.participants]
+    e_df = e_df[(e_df.phone != phone) | (e_df.email != email)]
+    e_df.drop(columns=['phone', 'email'], inplace=True)
+    new_participant = {'name': subject.id, 'phone': phone, 'email': email}
+    e_df['participants'] = [[new_participant] for i in range(0, len(e_df))]
+    updated_events = e_df.to_dict(orient='records')
+    apptoto.post_events(updated_events)
+    return f'Updated {len(updated_events)} events for subject {subject.id}'
+
+
+def update_contact(config, subject: Subject):
+    apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
+
+    phone = normalize_phone(subject.redcap.s0.phone)
+    email = subject.redcap.s0.email
+
+    contact_exists = False
+    try:
+        contact = apptoto.get_contact(external_id=subject.id)
+        contact_exists = True
+    except ApptotoError:
+        logger.info(f'Adding {subject.id} to apptoto address book')
+        contact = {'external_id': subject.id, 'name': subject.id, 'address_book': 'ASH',
+                   'phone': phone, 'email': email}
+        apptoto.post_contact(contact)
+        pass
+
+    if contact_exists:
+        phone_numbers = [p.get('normalized') for p in contact.get('phone_numbers')]
+        email_addresses = [e.get('address') for e in contact.get('email_addresses')]
+
+        need_to_update = False
+        if phone not in phone_numbers:
+            logger.info(f'Adding new phone for {subject.id} to apptoto address book')
+            need_to_update = True
+            for i in range(0, len(phone_numbers)):
+                contact['phone_numbers'][i]['is_primary'] = False
+            contact['phone_numbers'].append({'number': phone, 'is_mobile': True, 'is_primary': True})
+
+        if email not in email_addresses:
+            logger.info(f'Adding new email for {subject.id} to apptoto address book')
+            need_to_update = True
+            for i in range(0, len(email_addresses)):
+                contact['email_addresses'][i]['is_primary'] = False
+            contact['email_addresses'].append({'address': email, 'is_primary': True})
+
+        if need_to_update:
+            updated_contact = {'external_id': subject.id, 'name': subject.id, 'address_book': 'ASH',
+                               'id': contact.get('id'), 'phone_numbers': contact.get('phone_numbers'),
+                               'email_addresses': contact.get('email_addresses')}
+            apptoto.put_contact(updated_contact)
+
+    update_events(config, subject)
