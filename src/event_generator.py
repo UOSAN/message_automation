@@ -423,10 +423,10 @@ def update_events(config, subject: Subject):
     new_participant = {'name': subject.id, 'phone': phone, 'email': email}
     e_df['participants'] = [[new_participant] for i in range(0, len(e_df))]
     updated_events = e_df.to_dict(orient='records')
-    apptoto.post_events(updated_events)
+    apptoto.put_events(updated_events)
     return f'Updated {len(updated_events)} events for subject {subject.id}'
 
-
+# todo: check primary phone/email? may not matter
 def update_contact(config, subject: Subject):
     apptoto = Apptoto(api_token=config['apptoto_api_token'], user=config['apptoto_user'])
 

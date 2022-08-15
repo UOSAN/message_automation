@@ -166,7 +166,7 @@ class Apptoto:
 
         # this is just for while I'm working on things.
         # otherwise sometimes I mess up and retrieve EVERYTHING and it's a pain
-        max_to_retrieve = 1000
+        max_to_retrieve = 5000
         while True:
             page += 1
             kwargs['page'] = page
@@ -273,6 +273,7 @@ class Apptoto:
             logger.error(f'Failed to post contact - {str(r.status_code)} - {str(r.content)}')
             raise ApptotoError('Failed to post contact: {}'.format(r.status_code))
 
+    #todo: use_email parameter
     def get_events_by_contact(self, begin: datetime, external_id: str,
                               calendar_id=None, include_conversations=False):
         contact = self.get_contact(external_id=external_id)
@@ -290,3 +291,39 @@ class Apptoto:
             events = [e for e in events if e.get('calendar_id') == calendar_id]
 
         return events
+
+    def put_events(self, events: list):
+        """
+        Put events to the /v1/events API to update events
+
+        :param events: List of events to update
+        """
+        url = f'{self._endpoint}/events'
+
+        # Post num_events events at a time because Apptoto's API can't handle all events at once.
+        # Too many events results in "bad gateway" error
+        num_events = 25
+        for i in range(0, len(events), num_events):
+            events_slice = events[i:i + num_events]
+            request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
+                                             unpicklable=False)
+            logger.info('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
+                                                                               len(events)))
+
+            while (time.time() - self._last_request_time) < self._request_limit:
+                time.sleep(0.1)
+
+            r = requests.put(url=url,
+                              data=request_data,
+                              headers=self._headers,
+                              timeout=self._timeout,
+                              auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+            self._last_request_time = time.time()
+
+            if r.status_code != requests.codes.ok:
+                # logger.info('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),
+                #                                                                             events[i].start_time))
+
+                logger.error(f'Failed to update events - {str(r.status_code)} - {str(r.content)}')
+                raise ApptotoError('Failed to update events: {}'.format(r.status_code))
