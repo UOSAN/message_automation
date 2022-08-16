@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class ApptotoParticipant:
-    def __init__(self, name, phone, email=''):
+    def __init__(self, name=None, phone=None, email=None, id=None, external_id=None):
         """
         Create an ApptotoParticipant.
 
@@ -24,16 +24,20 @@ class ApptotoParticipant:
         :param str name: Participant name
         :param str phone: Participant phone number
         :param str email: Participant email
+        :param int contact_id: Participant apptoto id (may not work)
+        :param str contact_externalId: Participant external id (may not work)
         """
         self.name = name
         self.phone = phone
         self.email = email
+        self.contact_id = id
+        self.contact_external_id = external_id
 
 
 class ApptotoEvent:
     def __init__(self, calendar: str, title: str, start_time: datetime,
                  content: str, participants: List[ApptotoParticipant],
-                 end_time: datetime = None):
+                 end_time: datetime = None, external_id=None):
         """
         Create an ApptotoEvent.
 
@@ -58,6 +62,7 @@ class ApptotoEvent:
         self.content = content
 
         self.participants = participants
+        self.external_id = external_id
 
 
 class ApptotoError(Exception):
@@ -99,6 +104,7 @@ class Apptoto:
         # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
         num_events = 25
+        posted_events = []
         for i in range(0, len(events), num_events):
             events_slice = events[i:i + num_events]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
@@ -123,6 +129,10 @@ class Apptoto:
 
                 logger.error(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
+
+            posted_events.extend(r.json()['events'])
+
+        return posted_events
 
     def delete_event(self, event_id: int):
         url = f'{self._endpoint}/events'
