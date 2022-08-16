@@ -283,7 +283,7 @@ class Apptoto:
             logger.error(f'Failed to post contact - {str(r.status_code)} - {str(r.content)}')
             raise ApptotoError('Failed to post contact: {}'.format(r.status_code))
 
-    #todo: use_email parameter
+    # should email be optional?
     def get_events_by_contact(self, begin: datetime, external_id: str,
                               calendar_id=None, include_conversations=False):
         contact = self.get_contact(external_id=external_id)

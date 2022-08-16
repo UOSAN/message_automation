@@ -138,6 +138,12 @@ def daily_diary_one(config: Dict[str, str], subject: Subject):
     if len(events) > 0:
         apptoto.post_events(events)
 
+    events_file = Path(instance_path) / 'events.json'
+    if events_file.exists():
+        with open(events_file, 'r') as f:
+            events = json.load(f)
+    else:
+        events = dict()
     return 'Diary round 1 created'
 
 
