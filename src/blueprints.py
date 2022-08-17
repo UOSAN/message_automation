@@ -227,3 +227,24 @@ def download_files():
         for f in csvfiles:
             zf.write(f, arcname=f.name, compress_type=compression)
     return flask.send_from_directory(Path.home(), archive_name, as_attachment=True)
+
+
+@bp.route('/update', methods=['POST'])
+def update():
+    subject = get_subject()
+    if not subject:
+        return 'none'
+    try:
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        future_response = executor.submit(eg.update_contact)
+        future_response.add_done_callback(done)
+
+    except ValueError as err:
+        logger.error(str(err))
+        return str(err)
+
+    status = f'Updating messages for {subject}'
+    logger.info(status)
+    return status
