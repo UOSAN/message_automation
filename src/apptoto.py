@@ -152,17 +152,20 @@ class Apptoto:
         if not r.status_code == requests.codes.ok:
             raise ApptotoError('Failed to delete event {}: error {}'.format(event_id, r.status_code))
 
-    def get_event(self, event_id):
+    def get_event(self, event_id, include_conversations=False):
         url = f'{self._endpoint}/event'
 
-        params = {'id': event_id}
+        params = {'id': event_id, 'include_conversations': include_conversations}
 
+        while (time.time() - self._last_request_time) < self._request_limit:
+            time.sleep(0.1)
         r = requests.get(url=url,
                          params=params,
                          headers=self._headers,
                          timeout=self._timeout,
                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
+        self._last_request_time = time.time()
         if r.status_code == requests.codes.ok:
             return r.json()
 
@@ -283,19 +286,20 @@ class Apptoto:
             logger.error(f'Failed to post contact - {str(r.status_code)} - {str(r.content)}')
             raise ApptotoError('Failed to post contact: {}'.format(r.status_code))
 
-    # should email be optional?
-    def get_events_by_contact(self, begin: datetime, external_id: str,
+    def get_events_by_contact(self, begin: datetime, external_id: str, include_email=False,
                               calendar_id=None, include_conversations=False):
         contact = self.get_contact(external_id=external_id)
         phone_numbers = [p.get('normalized') for p in contact.get('phone_numbers')]
         email_addresses = [e.get('address') for e in contact.get('email_addresses')]
         events = []
+
         for phone in phone_numbers:
             events.extend(self.get_events(begin=begin.isoformat(), phone_number=phone,
                                           include_conversations=include_conversations))
-        for email in email_addresses:
-            events.extend(self.get_events(begin=begin.isoformat(), email_address=email,
-                                          include_conversations=include_conversations))
+        if include_email:
+            for email in email_addresses:
+                events.extend(self.get_events(begin=begin.isoformat(), email_address=email,
+                                              include_conversations=include_conversations))
 
         if calendar_id:
             events = [e for e in events if e.get('calendar_id') == calendar_id]
@@ -324,10 +328,10 @@ class Apptoto:
                 time.sleep(0.1)
 
             r = requests.put(url=url,
-                              data=request_data,
-                              headers=self._headers,
-                              timeout=self._timeout,
-                              auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+                             data=request_data,
+                             headers=self._headers,
+                             timeout=self._timeout,
+                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
             self._last_request_time = time.time()
 

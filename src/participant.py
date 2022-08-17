@@ -3,7 +3,7 @@ import redcap
 from src.apptoto import Apptoto
 
 
-class Subject:
+class RedcapParticipant:
     def __init__(self, subject_id, redcap_token):
         project = redcap.Project(url='https://redcap.uoregon.edu/api/',
                                  token=redcap_token)

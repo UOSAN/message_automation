@@ -5,11 +5,11 @@ from datetime import date
 
 import flask
 
-import src.event_generator as eg
-from src.participant import Subject
+from src.participant import RedcapParticipant
 from src.mylogging import DEFAULT_LOGGING
 from src.executor import executor
 from src.constants import DOWNLOAD_DIR
+from src.event_generator import EventGenerator
 
 bp = flask.Blueprint('blueprints', __name__)
 auto_bp = flask.Blueprint('auto_bp', __name__)
@@ -39,12 +39,7 @@ def get_subject():
     if len(subject_id) != 6 or not subject_id.startswith('ASH'):
         logger.warning(f'Warning: {subject_id} is not in the form \"ASHnnn\"')
 
-    try:
-        subject = Subject(subject_id, flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
-    except Exception as err:
-        logger.error(str(err))
-        return None
-    return subject
+    return subject_id
 
 
 @bp.route('/diary1', methods=['POST'])
@@ -54,7 +49,10 @@ def diary1():
         return 'none'
 
     try:
-        m = eg.daily_diary_one(config=flask.current_app.config['AUTOMATIONCONFIG'], subject=subject)
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        m = eg.daily_diary_one()
 
     except Exception as err:
         logger.error(str(err))
@@ -71,7 +69,10 @@ def diary2():
         return 'none'
 
     try:
-        m = eg.daily_diary_three(config=flask.current_app.config['AUTOMATIONCONFIG'], subject=subject)
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        m = eg.daily_diary_three()
 
     except Exception as err:
         logger.error(str(err))
@@ -88,16 +89,16 @@ def generate_messages():
         return 'none'
 
     try:
-        future_response = executor.submit(eg.generate_messages,
-                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                          subject=subject,
-                                          instance_path=flask.current_app.instance_path)
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        future_response = executor.submit(eg.generate_messages)
         future_response.add_done_callback(done)
     except Exception as err:
         logger.error(str(err))
         return str(err)
 
-    status = f'Message generation started for {subject.id}'
+    status = f'Message generation started for {subject}'
     logger.info(status)
     return status
 
@@ -110,15 +111,16 @@ def delete_events():
         return 'none'
 
     try:
-        future_response = executor.submit(eg.delete_messages,
-                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                          subject=subject)
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        future_response = executor.submit(eg.delete_messages)
         future_response.add_done_callback(done)
     except ValueError as err:
         logger.error(str(err))
         return str(err)
 
-    status = f'Message deletion started for {subject.id}'
+    status = f'Message deletion started for {subject}'
     logger.info(status)
 
     return status
@@ -131,9 +133,10 @@ def task():
         return 'none'
 
     try:
-        m = eg.generate_task_files(config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                   subject=subject,
-                                   instance_path=flask.current_app.instance_path)
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        m = eg.generate_task_files()
 
     except Exception as err:
         logger.error(str(err))
@@ -149,17 +152,17 @@ def responses():
     if not subject:
         return 'none'
     try:
-        future_response = executor.submit(eg.get_conversations,
-                                          config=flask.current_app.config['AUTOMATIONCONFIG'],
-                                          subject=subject,
-                                          instance_path=flask.current_app.instance_path)
+        eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
+                            participant_id=subject,
+                            instance_path=Path(flask.current_app.instance_path))
+        future_response = executor.submit(eg.get_conversations)
         future_response.add_done_callback(done)
 
     except ValueError as err:
         logger.error(str(err))
         return str(err)
 
-    status = f'Retrieving conversations for {subject.id}'
+    status = f'Retrieving conversations for {subject}'
     logger.info(status)
     return status
 
@@ -192,20 +195,23 @@ def index():
 @bp.route('/validate', methods=['POST'])
 def validate():
     subject = get_subject()
-    if subject:
-        logger.info(f'{subject.id} found in RedCap')
+    try:
+        redcap_participant = RedcapParticipant(subject,
+                                               flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
+        logger.info(f'{subject} found in RedCap')
         sessions = dict(s0='Session 0',
                         s1='Session 1',
                         s2='Session 2')
         for key in sessions:
-            if key in subject.redcap:
+            if key in redcap_participant.redcap:
                 logger.info(f'{sessions[key]} found')
             else:
                 logger.info(f'{sessions[key]} not found')
+        return subject
 
-        return subject.id
-    else:
-        return 'none'
+    except Exception as err:
+        logger.error(str(err))
+        return 'invalid'
 
 
 @bp.route('/files', methods=['POST'])
@@ -214,9 +220,9 @@ def download_files():
     if not subject:
         return 'none'
     csv_path = Path(DOWNLOAD_DIR)
-    csvfiles = csv_path.glob(f'*{subject.id}*.csv')
+    csvfiles = csv_path.glob(f'*{subject}*.csv')
     compression = zipfile.ZIP_STORED
-    archive_name = f'{subject.id}.zip'
+    archive_name = f'{subject}.zip'
     with zipfile.ZipFile(Path.home() / archive_name, mode='w', compression=compression) as zf:
         for f in csvfiles:
             zf.write(f, arcname=f.name, compress_type=compression)
