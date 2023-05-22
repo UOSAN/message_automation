@@ -105,7 +105,8 @@ class Apptoto:
 
         # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
-        num_events = 25
+        #num_events = 25
+        num_events = 20
         for i in range(0, len(events), num_events):
             events_slice = events[i:i + num_events]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
