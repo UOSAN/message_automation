@@ -90,15 +90,21 @@ az webapp deployment source config-zip --resource-group sanlab_rg_Linux_westus2 
 
 
 # Redeploy the app after making changes
-1. Make sure the github repo has the most updated scripts
-2. Pull the most updated repo to any local environment
-3. Get the current config.py file from Azure under the instance folder (This file is not and should not be on github). 
+1. Install the azure command line tools and log into azure on the command line (see above)
+2. Make sure the github repo has the most updated scripts
+3. Pull the most updated repo to any local environment
+4. Get the current config.py file from Azure under the instance folder (This file is not and should not be on github). 
 Log in to Azure portal -> go the the `message-automation` app service -> Development Tools -> SSH 
 The file is located at instance/config.py 
 Save the config.py to the local environment.  
 4. Double check the `config.py` and make sure all the API tokens are correct  
-5. create a new zip file from the `src/`, `tests/` and `instance/` directories, and the requirements.txt file  
-6. redeploy the app  
+5. Create a new zip file from the `src/`, `tests/` and `instance/` directories, and the requirements.txt file
+6. Deploy a test version of the app
+```
+az webapp deployment source config-zip --resource-group sanlab_rg_Linux_westus2 --name message-automation-dev --src message_automation.zip
+```
+7. Check that things work correctly at https://message-automation-dev.azurewebsites.net/
+8. Redeploy the app  
 ```
 az webapp deployment source config-zip --resource-group sanlab_rg_Linux_westus2 --name message-automation --src message_automation.zip
 ```
