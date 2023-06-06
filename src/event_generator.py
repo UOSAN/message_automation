@@ -334,7 +334,7 @@ class EventGenerator:
                                                    content=e.content,
                                                    participants=participants))
 
-            posted_events = self.apptoto.post_events(events)
+            posted_events = self.apptoto.post_events(apptoto_events)
             self._update_events_file(posted_events)
 
             csv_path = Path(DOWNLOAD_DIR)
