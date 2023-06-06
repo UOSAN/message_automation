@@ -177,9 +177,9 @@ class Apptoto:
 
         kwargs['page_size'] = MAX_EVENTS
 
-        # this is just for while I'm working on things.
-        # otherwise sometimes I mess up and retrieve EVERYTHING and it's a pain
-        max_to_retrieve = 5000
+        # this is just for while I'm working on things -- change to a big number when not testing
+        # otherwise sometimes I mess up and retrieve EVERYTHING from all users and it's a pain
+        max_to_retrieve = 50
         while True:
             page += 1
             kwargs['page'] = page

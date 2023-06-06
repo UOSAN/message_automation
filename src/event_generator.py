@@ -146,7 +146,7 @@ class EventGenerator:
         :return:
         """
         subject = RedcapParticipant(self.participant_id,
-                                    self.config['AUTOMATIONCONFIG']['redcap_api_token'])
+                                    self.config['redcap_api_token'])
 
         # check that we have the required info from redcap
         check_fields(subject, ['initials', 'phone', 'sleeptime', 'email', 'date_s0'])
@@ -184,7 +184,7 @@ class EventGenerator:
         :return:
         """
         subject = RedcapParticipant(self.participant_id,
-                                    self.config['AUTOMATIONCONFIG']['redcap_api_token'])
+                                    self.config['redcap_api_token'])
         # first check that we have the required info from redcap
         check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
 
@@ -224,7 +224,7 @@ class EventGenerator:
         :return:
         """
         subject = RedcapParticipant(self.participant_id,
-                                    self.config['AUTOMATIONCONFIG']['redcap_api_token'])
+                                    self.config['redcap_api_token'])
         # first check that we have the required info from redcap
         check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
                                'sleeptime', 'waketime', 'quitdate', 'email'])
@@ -345,7 +345,7 @@ class EventGenerator:
 
     def generate_task_files(self):
         subject = RedcapParticipant(self.participant_id,
-                                    self.config['AUTOMATIONCONFIG']['redcap_api_token'])
+                                    self.config['redcap_api_token'])
         # first check that we have the required info from redcap
         check_fields(subject, ['value1_s0', 'value7_s0'])
 
@@ -378,7 +378,8 @@ class EventGenerator:
 
         event_ids = self._get_event_ids()
         logger.info(f'Searching {len(event_ids)} events')
-        events = self.apptoto.get_events(e_id, begin=begin, include_conversations=True)
+        # I had getevents(eid, begin, True) here -- I'm guessing I was in the middle of changing things
+        events = self.apptoto.get_events(begin=begin, include_conversations=True)
 
         conversations = pd.json_normalize(events, record_path=['participants',
                                                                'conversations',
@@ -447,7 +448,7 @@ class EventGenerator:
         # get all future events for a subject
         # Add or change phone & email to match redcap information
         subject = RedcapParticipant(self.participant_id,
-                                    self.config['AUTOMATIONCONFIG']['redcap_api_token'])
+                                    self.config['redcap_api_token'])
         begin = datetime.now(timezone.utc)
         event_ids = self._get_event_ids()
 
@@ -485,7 +486,7 @@ class EventGenerator:
     def update_contact(self):
 
         subject = RedcapParticipant(self.participant_id,
-                                    self.config['AUTOMATIONCONFIG']['redcap_api_token'])
+                                    self.config['redcap_api_token'])
 
         phone = normalize_phone(subject.redcap.s0.phone)
         email = subject.redcap.s0.email

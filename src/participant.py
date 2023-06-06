@@ -10,7 +10,7 @@ class RedcapParticipant:
         data = project.export_records(events=['session_0_arm_1',
                                               'session_1_arm_1',
                                               'session_2_arm_1'],
-                                      format='df')
+                                      format_type='df')
         self.id = subject_id
         self.redcap = data.loc[subject_id].rename(index=dict(session_0_arm_1='s0',
                                                              session_1_arm_1='s1',
