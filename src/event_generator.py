@@ -338,6 +338,8 @@ class EventGenerator:
             self._update_events_file(posted_events)
 
             csv_path = Path(DOWNLOAD_DIR)
+            if not csv_path.exists():
+                csv_path.mkdir()
             f = csv_path / (subject.id + '_messages.csv')
             messages.write_to_file(f, columns=['UO_ID', 'Message'])
 

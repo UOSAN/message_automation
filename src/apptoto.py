@@ -7,7 +7,7 @@ import jsonpickle
 import requests
 from requests.auth import HTTPBasicAuth
 
-from src.constants import MAX_EVENTS
+from src.constants import MAX_EVENTS, MAX_POST
 from src.mylogging import DEFAULT_LOGGING
 
 logging.config.dictConfig(DEFAULT_LOGGING)
@@ -103,7 +103,7 @@ class Apptoto:
 
         # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
-        num_events = 25
+        num_events = MAX_POST
         posted_events = []
         for i in range(0, len(events), num_events):
             events_slice = events[i:i + num_events]
@@ -316,7 +316,7 @@ class Apptoto:
 
         # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
-        num_events = 25
+        num_events = MAX_POST
         for i in range(0, len(events), num_events):
             events_slice = events[i:i + num_events]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
