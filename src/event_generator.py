@@ -373,15 +373,15 @@ class EventGenerator:
         """Get timestamp and content of all message to and from participant."""
 
         begin = datetime(year=2021, month=4, day=1)
-        """events = self.apptoto.get_events_by_contact(begin,
+        events = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID,
-                                                    include_conversations=True)"""
+                                                    include_conversations=True)
 
-        event_ids = self._get_event_ids()
-        logger.info(f'Searching {len(event_ids)} events')
-        # I had getevents(eid, begin, True) here -- I'm guessing I was in the middle of changing things
-        events = self.apptoto.get_events(begin=begin, include_conversations=True)
+        # potential "new" way, not currently possible
+        # event_ids = self._get_event_ids()
+        # logger.info(f'Searching {len(event_ids)} events')
+        # events = self.apptoto.get_events(event_ids, begin=begin, include_conversations=True)
 
         conversations = pd.json_normalize(events, record_path=['participants',
                                                                'conversations',
@@ -462,6 +462,9 @@ class EventGenerator:
         events = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID)
+
+        if not events:
+            return f'No future events for subject {subject.id}'
 
         e_df = pd.DataFrame.from_records(events)
         e_df.drop_duplicates(subset='id', inplace=True)

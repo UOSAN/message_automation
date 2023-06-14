@@ -242,7 +242,7 @@ class Apptoto:
         url = f'{self._endpoint}/contacts'
 
         request_data = jsonpickle.encode({'contacts': [contact]}, unpicklable=False)
-        logger.info(f'Posting contact {contact.name}to apptoto')
+        logger.info(f"Posting contact {contact['name']} to apptoto")
 
         while (time.time() - self._last_request_time) < self._request_limit:
             time.sleep(0.1)
