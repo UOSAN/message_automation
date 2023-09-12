@@ -217,7 +217,7 @@ class EventGenerator:
 
         return 'Diary round 3 created'
 
-    def generate_messages(self):
+    def generate_messages(self, upload=True):
         """
         Generate events for intervention messages, messages about daily cigarette usage,
         messages for boosters, daily diary rounds 2, 3 and 4.
@@ -325,7 +325,7 @@ class EventGenerator:
                 events.append(Event(time=t, title=SMS_TITLE, content=content))
                 n = n + 1
 
-        if len(events) > 0:
+        if len(events) > 0 and upload:
             apptoto_events = []
             for e in sorted(events):
                 apptoto_events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],

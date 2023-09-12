@@ -36,7 +36,7 @@ class Messages:
         # duplicate the list and append until it's long enough
         while len(self._messages) < num_messages:
             diff = num_messages - len(self._messages)
-            self._messages.append(self._messages[:diff], ignore_index=True)
+            self._messages = pd.concat([self._messages, self._messages[:diff]], ignore_index=True)
 
     def write_to_file(self, filename, columns=None, header=True):
         self._messages.to_csv(filename, columns=columns, index=False, header=header)
