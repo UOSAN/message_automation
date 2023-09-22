@@ -90,6 +90,7 @@ class Apptoto:
         self._timeout = 240
 
         # seconds between requests for apptoto burst rate limit, 100 requests per minute
+        # minimum = 0.6
         self._request_limit = 0.6
         self._last_request_time = time.time()
 
@@ -177,9 +178,9 @@ class Apptoto:
 
         kwargs['page_size'] = MAX_EVENTS
 
-        # this is just for while I'm working on things -- change to a big number when not testing
+        # this (50) is just for while I'm working on things -- change to a big number when not testing
         # otherwise sometimes I mess up and retrieve EVERYTHING from all users and it's a pain
-        max_to_retrieve = 50
+        max_to_retrieve = 9999
         while True:
             page += 1
             kwargs['page'] = page
@@ -324,16 +325,28 @@ class Apptoto:
             logger.info('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
                                                                                len(events)))
 
-            while (time.time() - self._last_request_time) < self._request_limit:
-                time.sleep(0.1)
+            # just try again if it doesn't work
+            max_attempts = 5
+            remaining_attempts = max_attempts
+            success = False
+            while remaining_attempts and not success:
+                while (time.time() - self._last_request_time) < self._request_limit:
+                    time.sleep(0.1)
 
-            r = requests.put(url=url,
-                             data=request_data,
-                             headers=self._headers,
-                             timeout=self._timeout,
-                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+                r = requests.put(url=url,
+                                 data=request_data,
+                                 headers=self._headers,
+                                 timeout=self._timeout,
+                                 auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
-            self._last_request_time = time.time()
+                self._last_request_time = time.time()
+
+                if r.status_code != requests.codes.ok:
+                    remaining_attempts = remaining_attempts - 1
+                    s = 's' if remaining_attempts else ''
+                    logger.info(f'Failed to post, trying {remaining_attempts} more time{s}')
+                else:
+                    success = True
 
             if r.status_code != requests.codes.ok:
                 # logger.info('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),

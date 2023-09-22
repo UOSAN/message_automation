@@ -474,13 +474,14 @@ class EventGenerator:
 
         phone = normalize_phone(subject.redcap.s0.phone)
         email = subject.redcap.s0.email
+        initials = subject.redcap.s0.initials
 
         # check email, phone against new values
         e_df['phone'] = [p[0]['normalized_phone'] for p in e_df.participants]
         e_df['email'] = [p[0]['email'] for p in e_df.participants]
         e_df = e_df[(e_df.phone != phone) | (e_df.email != email)]
         e_df.drop(columns=['phone', 'email'], inplace=True)
-        new_participant = {'name': subject.id, 'phone': phone, 'email': email}
+        new_participant = {'name': initials, 'phone': phone, 'email': email}
         e_df['participants'] = [[new_participant] for i in range(0, len(e_df))]
         updated_events = e_df.to_dict(orient='records')
         self.apptoto.put_events(updated_events)
@@ -495,6 +496,7 @@ class EventGenerator:
 
         phone = normalize_phone(subject.redcap.s0.phone)
         email = subject.redcap.s0.email
+        initials = subject.redcap.s0.initials
 
         contact_exists = False
         try:
@@ -502,7 +504,7 @@ class EventGenerator:
             contact_exists = True
         except ApptotoError:
             logger.info(f'Adding {subject.id} to apptoto address book')
-            contact = {'external_id': subject.id, 'name': subject.id, 'address_book': 'ASH',
+            contact = {'external_id': subject.id, 'name': initials, 'address_book': 'ASH',
                        'phone': phone, 'email': email}
             self.apptoto.post_contact(contact)
             pass
@@ -510,7 +512,7 @@ class EventGenerator:
         if contact_exists:
             phone_numbers = [p.get('normalized') for p in contact.get('phone_numbers')]
             email_addresses = [e.get('address') for e in contact.get('email_addresses')]
-
+            contact_name = contact['name']
             need_to_update = False
             if phone not in phone_numbers:
                 logger.info(f'Adding new phone for {subject.id} to apptoto address book')
@@ -526,10 +528,18 @@ class EventGenerator:
                     contact['email_addresses'][i]['is_primary'] = False
                 contact['email_addresses'].append({'address': email, 'is_primary': True})
 
+            if contact_name == subject.id:
+                logger.info(f'Changing name to initials for {subject.id} in apptoto address book')
+                contact_name = initials
+                need_to_update = True
+
             if need_to_update:
-                updated_contact = {'external_id': subject.id, 'name': subject.id, 'address_book': 'ASH',
+                updated_contact = {'external_id': subject.id, 'name': contact_name, 'address_book': 'ASH',
                                    'id': contact.get('id'), 'phone_numbers': contact.get('phone_numbers'),
                                    'email_addresses': contact.get('email_addresses')}
                 self.apptoto.put_contact(updated_contact)
 
+        # always update events regardless
+        # That way if posting fails, we can just redo update_subject
         self.update_events()
+
