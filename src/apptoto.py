@@ -170,7 +170,10 @@ class Apptoto:
         if r.status_code == requests.codes.ok:
             return r.json()
 
-    def get_events(self, **kwargs):
+    # TODO
+    # this is just for while I'm working on things -- change max to a big number when not testing
+    # otherwise sometimes I mess up and retrieve EVERYTHING from all users and it's a pain
+    def get_events(self, max_to_retrieve=9999, **kwargs):
         url = f'{self._endpoint}/events'
 
         events = []
@@ -178,9 +181,6 @@ class Apptoto:
 
         kwargs['page_size'] = MAX_EVENTS
 
-        # this (50) is just for while I'm working on things -- change to a big number when not testing
-        # otherwise sometimes I mess up and retrieve EVERYTHING from all users and it's a pain
-        max_to_retrieve = 9999
         while True:
             page += 1
             kwargs['page'] = page
