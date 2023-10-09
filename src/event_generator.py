@@ -454,6 +454,7 @@ class EventGenerator:
         begin = datetime.now(timezone.utc)
         event_ids = self._get_event_ids()
 
+        # this would be the new way, never fully implemented
         """  events = []
         for e_id in event_ids:
             events.append(self.apptoto.get_event(e_id))
@@ -479,9 +480,11 @@ class EventGenerator:
         # check email, phone against new values
         e_df['phone'] = [p[0]['normalized_phone'] for p in e_df.participants]
         e_df['email'] = [p[0]['email'] for p in e_df.participants]
-        e_df = e_df[(e_df.phone != phone) | (e_df.email != email)]
+        # originally we only changed if the phone/email changed, but we need to change the name too
+        # so just update all of them
+        # e_df = e_df[(e_df.phone != phone) | (e_df.email != email)]
         e_df.drop(columns=['phone', 'email'], inplace=True)
-        new_participant = {'name': initials, 'phone': phone, 'email': email, 'contact_external_id': initials}
+        new_participant = {'name': initials, 'phone': phone, 'email': email, 'contact_external_id': subject.id}
         e_df['participants'] = [[new_participant] for i in range(0, len(e_df))]
         updated_events = e_df.to_dict(orient='records')
         self.apptoto.put_events(updated_events)
