@@ -151,7 +151,7 @@ class EventGenerator:
         # check that we have the required info from redcap
         check_fields(subject, ['initials', 'phone', 'sleeptime', 'email', 'date_s0'])
 
-        participants = [ApptotoParticipant(subject.initials,
+        participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
                                            subject.redcap.s0.email)]
 
@@ -191,7 +191,7 @@ class EventGenerator:
         if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.training_end):
             return f'Missing session1 training end date for {subject.id}'
 
-        participants = [ApptotoParticipant(subject.initials,
+        participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
                                            subject.redcap.s0.email)]
 
@@ -229,7 +229,7 @@ class EventGenerator:
         check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
                                'sleeptime', 'waketime', 'quitdate', 'email'])
 
-        participants = [ApptotoParticipant(subject.initials,
+        participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
                                            subject.redcap.s0.email)]
 
