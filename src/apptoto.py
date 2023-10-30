@@ -21,17 +21,18 @@ class ApptotoParticipant:
 
         An ApptotoParticipant represents a single participant on an ApptotoEvent.
         This participant will receive messages via email or phone.
-        :param str name: Participant name
+        :param str name: Participant name (initials)
         :param str phone: Participant phone number
         :param str email: Participant email
-        :param int contact_id: Participant apptoto id (may not work)
-        :param str contact_externalId: Participant external id (may not work)
+        :param int contact_id: Participant apptoto id
+        :param str contact_externalId: Participant external id
         """
         self.name = name
         self.phone = phone
         self.email = email
         self.contact_id = id
         self.contact_external_id = external_id
+
 
 
 class ApptotoEvent:
