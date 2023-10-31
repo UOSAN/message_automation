@@ -400,19 +400,42 @@ class EventGenerator:
         messages['content'] = 'UO: ' + messages.Message
         conversations = conversations.merge(messages, on='content', how='left').set_index('id')
 
-        sms_convos = conversations[conversations.title.str.contains(SMS_TITLE)]
+        conversations['at'] = pd.to_datetime(conversations['at'])
 
+        # for debugging only
+        # conversations.to_csv(csv_path / f'{self.participant_id}_all_conversations.csv', date_format='%x %X')
+
+        sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
+        received = conversations[conversations.event_type == 'replied'].dropna(axis=1, how='all')
+        merged = sent.merge(received, on='participants.event_id', suffixes=('_sent', '_rec'), how='outer')
+
+        columns = ['at_sent', 'UO_ID', 'content_sent', 'at_rec', 'content_rec']
+        header = ['sent_at', 'UO_ID', 'message', 'replied_at', 'reply']
+
+        sms_convos = merged[(merged.title_sent.str.contains(SMS_TITLE)) & (~merged.UO_ID.isna())]
         sms_name = csv_path / f'{self.participant_id}_sms_conversations.csv'
 
-        columns = ['at', 'event_type', 'UO_ID', 'content', 'title',
-                   'delivery_state', 'delivery_error', 'delivery_failed', 'send_failed']
-        sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns)
+        sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns, header=header)
 
-        cig_convos = conversations[conversations.title.str.contains(CIGS_TITLE)]
+        cig_convos = merged[(merged.title_sent.str.contains(CIGS_TITLE)) & (merged.content_sent.str.startswith('UO'))]
         cig_name = csv_path / f'{self.participant_id}_cig_conversations.csv'
-        cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns)
+        cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns, header=header)
 
-        return f'Conversations written to {sms_name.name} and {cig_name.name}'
+        with open(csv_path / f'{self.participant_id}_summary.txt', 'w') as f:
+            sms_sent = sms_convos.content_sent.count()
+            sms_rec = sms_convos.content_rec.count()
+            cig_sent = cig_convos.content_sent.count()
+            cig_rec = cig_convos.content_rec.count()
+            f.write(f'SMS messages sent: {sms_sent}\n')
+            f.write(f'SMS replies: {sms_rec}\n')
+            f.write(f'SMS response rate: {100*sms_rec/sms_sent:.02f}\n')
+            f.write(f'CIG messages sent: {cig_sent}\n')
+            f.write(f'CIG replies: {cig_rec}\n')
+            f.write(f'CIG response rate: {100*cig_rec/cig_sent:.02f}\n')
+
+        return_message = f'Conversations written to {sms_name.name} and {cig_name.name}.\n'
+        return_message += f'Summary written to {self.participant_id}_summary.txt.'
+        return return_message
 
     def delete_messages(self):
 

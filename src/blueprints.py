@@ -220,11 +220,11 @@ def download_files():
     if not subject:
         return 'none'
     csv_path = Path(DOWNLOAD_DIR)
-    csvfiles = csv_path.glob(f'*{subject}*.csv')
+    files = csv_path.glob(f'*{subject}*.*')
     compression = zipfile.ZIP_STORED
     archive_name = f'{subject}.zip'
     with zipfile.ZipFile(Path.home() / archive_name, mode='w', compression=compression) as zf:
-        for f in csvfiles:
+        for f in files:
             zf.write(f, arcname=f.name, compress_type=compression)
     return flask.send_from_directory(Path.home(), archive_name, as_attachment=True)
 
