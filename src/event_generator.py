@@ -458,11 +458,10 @@ class EventGenerator:
         logger.info(f'Conversations written to {sms_name.name} and {cig_name.name}.')
         logger.info(f'Summary written to {self.participant_id}_summary.txt.')
 
-        message = f'Conversations retrieved for {self.participant_id}. '
         if np.isnan(response_rate):
-            message += 'No conversations started.'
+            message = f'No conversations started for {self.participant_id}.'
         else:
-            message += f'Response rate: {response_rate:.02f}%.'
+            message = f'Response rate for {self.participant_id}: {response_rate:.0f}%.'
         return message
 
     def delete_messages(self):
