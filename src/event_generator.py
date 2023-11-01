@@ -421,20 +421,24 @@ class EventGenerator:
         cig_name = csv_path / f'{self.participant_id}_cig_conversations.csv'
         cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns, header=header)
 
+        sms_sent = sms_convos.content_sent.count()
+        sms_rec = sms_convos.content_rec.count()
+        cig_sent = cig_convos.content_sent.count()
+        cig_rec = cig_convos.content_rec.count()
+        response_rate = 100*(sms_rec + cig_rec)/(sms_sent + cig_sent)
+
         with open(csv_path / f'{self.participant_id}_summary.txt', 'w') as f:
-            sms_sent = sms_convos.content_sent.count()
-            sms_rec = sms_convos.content_rec.count()
-            cig_sent = cig_convos.content_sent.count()
-            cig_rec = cig_convos.content_rec.count()
             f.write(f'SMS messages sent: {sms_sent}\n')
             f.write(f'SMS replies: {sms_rec}\n')
             f.write(f'SMS response rate: {100*sms_rec/sms_sent:.02f}\n')
             f.write(f'CIG messages sent: {cig_sent}\n')
             f.write(f'CIG replies: {cig_rec}\n')
             f.write(f'CIG response rate: {100*cig_rec/cig_sent:.02f}\n')
+            f.write(f'Overall response rate: {response_rate:.02f}\n')
 
         return_message = f'Conversations written to {sms_name.name} and {cig_name.name}.\n'
-        return_message += f'Summary written to {self.participant_id}_summary.txt.'
+        return_message += f'Summary written to {self.participant_id}_summary.txt.\n'
+        return_message += f'Response rate: {response_rate:.02f}'
         return return_message
 
     def delete_messages(self):
