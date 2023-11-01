@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List
 import logging.config
 import pandas as pd
+import numpy as np
 import re
 import json
 
@@ -400,19 +401,68 @@ class EventGenerator:
         messages['content'] = 'UO: ' + messages.Message
         conversations = conversations.merge(messages, on='content', how='left').set_index('id')
 
-        sms_convos = conversations[conversations.title.str.contains(SMS_TITLE)]
+        conversations['at'] = pd.to_datetime(conversations['at'])
+
+        # for debugging only
+        # conversations.to_csv(csv_path / f'{self.participant_id}_all_conversations.csv', date_format='%x %X')
+
+        sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
+        received = conversations[conversations.event_type == 'replied'].dropna(axis=1, how='all')
+
+        if sent.empty:
+            return f'No messages sent for {self.participant_id}.'
+
+        elif received.empty:
+            merged = sent.rename(columns = {'at':'at_sent', 'content':'content_sent', 'title':'title_sent'})
+            merged['at_rec'] = pd.NaT
+            merged['content_rec'] = np.NaN
+
+        else:
+            merged = sent.merge(received, on='participants.event_id', suffixes=('_sent', '_rec'), how='outer')
+
+        if 'UO_ID' not in merged.columns:
+            merged['UO_ID'] = np.NaN
+
+        columns = ['at_sent', 'UO_ID', 'content_sent', 'at_rec', 'content_rec']
+        header = ['sent_at', 'UO_ID', 'message', 'replied_at', 'reply']
+
+        sms_convos = merged[(merged.title_sent.str.contains(SMS_TITLE)) & (~merged.UO_ID.isna())]
 
         sms_name = csv_path / f'{self.participant_id}_sms_conversations.csv'
 
-        columns = ['at', 'event_type', 'UO_ID', 'content', 'title',
-                   'delivery_state', 'delivery_error', 'delivery_failed', 'send_failed']
-        sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns)
+        sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns, header=header)
 
-        cig_convos = conversations[conversations.title.str.contains(CIGS_TITLE)]
+        cig_convos = merged[(merged.title_sent.str.contains(CIGS_TITLE)) & (merged.content_sent.str.startswith('UO'))]
         cig_name = csv_path / f'{self.participant_id}_cig_conversations.csv'
-        cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns)
+        cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns, header=header)
 
-        return f'Conversations written to {sms_name.name} and {cig_name.name}'
+        sms_sent = sms_convos.content_sent.count()
+        sms_rec = sms_convos.content_rec.count()
+        cig_sent = cig_convos.content_sent.count()
+        cig_rec = cig_convos.content_rec.count()
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            response_rate = 100*(sms_rec + cig_rec)/(sms_sent + cig_sent)
+            cig_rr = 100 * cig_rec / cig_sent
+            sms_rr = 100 * sms_rec / sms_sent
+
+        with open(csv_path / f'{self.participant_id}_summary.txt', 'w') as f:
+            f.write(f'SMS messages sent: {sms_sent}\n')
+            f.write(f'SMS replies: {sms_rec}\n')
+            f.write(f'SMS response rate: {sms_rr:.02f}\n')
+            f.write(f'CIG messages sent: {cig_sent}\n')
+            f.write(f'CIG replies: {cig_rec}\n')
+            f.write(f'CIG response rate: {cig_rr:.02f}\n')
+            f.write(f'Overall response rate: {response_rate:.02f}\n')
+
+        logger.info(f'Conversations written to {sms_name.name} and {cig_name.name}.')
+        logger.info(f'Summary written to {self.participant_id}_summary.txt.')
+
+        if np.isnan(response_rate):
+            message = f'No conversations started for {self.participant_id}.'
+        else:
+            message = f'Response rate for {self.participant_id}: {response_rate:.0f}%.'
+        return message
 
     def delete_messages(self):
 
