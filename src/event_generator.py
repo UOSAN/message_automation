@@ -430,16 +430,16 @@ class EventGenerator:
 
         sms_name = csv_path / f'{self.participant_id}_sms_conversations.csv'
 
-        sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns, header=header)
+        sms_convos.to_csv(sms_name, date_format='%x %X', columns=columns, header=header, index=False)
 
         cig_convos = merged[(merged.title_sent.str.contains(CIGS_TITLE)) & (merged.content_sent.str.startswith('UO'))]
         cig_name = csv_path / f'{self.participant_id}_cig_conversations.csv'
-        cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns, header=header)
+        cig_convos.to_csv(cig_name, date_format='%x %X', columns=columns, header=header, index=False)
 
-        sms_sent = sms_convos.content_sent.count()
-        sms_rec = sms_convos.content_rec.count()
-        cig_sent = cig_convos.content_sent.count()
-        cig_rec = cig_convos.content_rec.count()
+        sms_sent = len(sms_convos['participants.event_id'].unique())
+        sms_rec = len(sms_convos[~sms_convos.content_rec.isnull()]['participants.event_id'].unique())
+        cig_sent = len(cig_convos['participants.event_id'].unique())
+        cig_rec = len(cig_convos[~cig_convos.content_rec.isnull()]['participants.event_id'].unique())
 
         with np.errstate(divide='ignore', invalid='ignore'):
             response_rate = 100*(sms_rec + cig_rec)/(sms_sent + cig_sent)
