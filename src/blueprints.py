@@ -200,8 +200,7 @@ def validate():
                                                flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
         logger.info(f'{subject} found in RedCap')
         sessions = dict(s0='Session 0',
-                        s1='Session 1',
-                        s2='Session 2')
+                        s1='Session 1')
         for key in sessions:
             if key in redcap_participant.redcap:
                 logger.info(f'{sessions[key]} found')
