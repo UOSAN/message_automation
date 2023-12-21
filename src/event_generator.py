@@ -1,6 +1,7 @@
 import random
 from collections import namedtuple
-from datetime import datetime, timedelta, date, time, timezone
+import datetime
+import zoneinfo
 from pathlib import Path
 from typing import List
 import logging.config
@@ -46,9 +47,21 @@ ITI = [
     1.0
 ]
 
+time_zone_codes = {'PT': 'US/Pacific', 'MT': 'US/Mountain', 'CT': 'US/Central', 'ET': 'US/Eastern',
+                   'AZ': 'US/Arizona', 'HI': 'US/Hawaii'}
+
+def change_tz(time: str, tz: str):
+    oldtime = datetime.datetime.fromisoformat(time)
+
+    if tz not in time_zone_codes:
+        raise ValueError('time zone code not supported')
+    newtime = oldtime.astimezone(zoneinfo.ZoneInfo(time_zone_codes[tz]))
+
+    return newtime
+
 
 # see stack overflow 51918580
-def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
+def random_times(start: datetime.datetime, end: datetime.datetime, n: int) -> List[datetime.datetime]:
     """
     Create randomly spaced times between start and end time.
     :param n:
@@ -64,7 +77,7 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     delta = end - start
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
     r = [(min_interval - 1) * i + x for i, x in enumerate(sorted(random.sample(range(range_max), n)))]
-    times = [start + timedelta(minutes=x) for x in r]
+    times = [start + datetime.timedelta(minutes=x) for x in r]
     return times
 
 
@@ -95,13 +108,13 @@ def check_fields(subject: RedcapParticipant, required_fields):
 
 
 # Get dates for diary messages, always including at least one weekend day
-def get_diary_dates(start_date: date, number_of_days=4):
-    dates = [start_date + timedelta(days=d) for d in range(0, number_of_days)]
+def get_diary_dates(start_date: datetime.date, number_of_days=4):
+    dates = [start_date + datetime.timedelta(days=d) for d in range(0, number_of_days)]
     day_of_week = [d.weekday() for d in dates]
     # shift by one day until you have at least one weekend day
     # 5 = Saturday, 6 = Sunday
     while max(day_of_week) < 5:
-        dates = [d + timedelta(days=1) for d in dates]
+        dates = [d + datetime.timedelta(days=1) for d in dates]
         day_of_week = [d.weekday() for d in dates]
     return dates
 
@@ -159,16 +172,21 @@ class EventGenerator:
         events = []
 
         # Diary round 1
-        round1_start = date.fromisoformat(subject.redcap.s0.date_s0) + timedelta(days=2)
+        round1_start = datetime.date.fromisoformat(subject.redcap.s0.date_s0) + datetime.timedelta(days=2)
         round1_dates = get_diary_dates(round1_start)
-        sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+        sleep_time = datetime.time.fromisoformat(subject.redcap.s0.sleeptime)
+        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
+            time_zone = subject.redcap.s0.timezone
+        else:
+            time_zone = 'PT'
         for day, message_date in enumerate(round1_dates):
             content = f'UO: Daily Diary #{day + 1}'
             title = f'ASH Daily Diary #{day + 1}'
-            message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+            message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=2)
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
+                                       time_zone=time_zone,
                                        content=content,
                                        participants=participants))
 
@@ -199,16 +217,21 @@ class EventGenerator:
         events = []
 
         # Diary round 3
-        round3_start = date.fromisoformat(subject.redcap.s1.training_end) + timedelta(weeks=6)
+        round3_start = datetime.date.fromisoformat(subject.redcap.s1.training_end) + datetime.timedelta(weeks=6)
         round3_dates = get_diary_dates(round3_start)
-        sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+        sleep_time = datetime.time.fromisoformat(subject.redcap.s0.sleeptime)
+        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
+            time_zone = subject.redcap.s0.timezone
+        else:
+            time_zone = 'PT'
         for day, message_date in enumerate(round3_dates):
             content = f'UO: Daily Diary #{day + 9}'
             title = f'ASH Daily Diary #{day + 9}'
-            message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+            message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=2)
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
+                                       time_zone=time_zone,
                                        content=content,
                                        participants=participants))
 
@@ -246,22 +269,28 @@ class EventGenerator:
                                      message_values,
                                      num_required_messages)
 
-        quit_date = date.fromisoformat(subject.redcap.s0.quitdate)
-        wake_time = time.fromisoformat(subject.redcap.s0.waketime)
-        sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+        quit_date = datetime.date.fromisoformat(subject.redcap.s0.quitdate)
+        wake_time = datetime.time.fromisoformat(subject.redcap.s0.waketime)
+        sleep_time = datetime.time.fromisoformat(subject.redcap.s0.sleeptime)
+
+        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
+            time_zone = subject.redcap.s0.timezone
+        else:
+            time_zone = 'PT'
 
         Event = namedtuple('Event', ['time', 'title', 'content'])
 
         # Add quit_message_date date boosters 3 hrs after wake time
-        message_datetime = datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
+        message_datetime = datetime.datetime.combine(quit_date - datetime.timedelta(days=1),
+                                                     wake_time) + datetime.timedelta(hours=3)
         events.append(Event(time=message_datetime, title='UO: Day Before', content='UO: Day Before Quitting'))
-        message_datetime = datetime.combine(quit_date, wake_time) + timedelta(hours=3)
+        message_datetime = datetime.datetime.combine(quit_date, wake_time) + datetime.timedelta(hours=3)
         events.append(Event(time=message_datetime, title='UO: Quit Date', content='UO: Quit Date'))
 
         # Add one message per day asking for a reply with the number of cigarettes smoked, 1 hr before bedtime
         for days in range(DAYS_1 + DAYS_2):
-            message_date = quit_date + timedelta(days=days)
-            message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=1)
+            message_date = quit_date + datetime.timedelta(days=days)
+            message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=1)
             content = "UO: Good evening! Please respond with the number of cigarettes you have smoked today. " \
                       "If you have not smoked any cigarettes, please respond with a 0. Thank you!"
             events.append(Event(time=message_datetime, title=CIGS_TITLE, content=content))
@@ -270,28 +299,28 @@ class EventGenerator:
         n = 1
         booster_dates = []
         for days in range(1, 51, 7):
-            message_date = quit_date + timedelta(days=days)
+            message_date = quit_date + datetime.timedelta(days=days)
             booster_dates.append(message_date)
-            message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+            message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=3)
 
             title = f'{condition_abbrev(condition)} Booster {n}'
             content = "UO: Booster session"
             events.append(Event(time=message_datetime, title=title, content=content))
             n = n + 1
 
-            message_date = quit_date + timedelta(days=(days + 3))
+            message_date = quit_date + datetime.timedelta(days=(days + 3))
             booster_dates.append(message_date)
-            message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+            message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=3)
             title = f'{condition_abbrev(condition)} Booster {n}'
             content = "UO: Booster session"
             events.append(Event(time=message_datetime, title=title, content=content))
             n = n + 1
 
         # Add daily diary round 2 messages, 2 hrs before bedtime
-        round2_start = quit_date + timedelta(weeks=4)
+        round2_start = quit_date + datetime.timedelta(weeks=4)
         round2_dates = get_diary_dates(round2_start)
         for day, message_date in enumerate(round2_dates):
-            message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+            message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=2)
             content = f'UO: Daily Diary #{day + 5}'
             title = f'ASH Daily Diary #{day + 5}'
             events.append(Event(time=message_datetime, title=title, content=content))
@@ -300,18 +329,18 @@ class EventGenerator:
         logger.info(f'Generating intervention messages for {subject.id}')
         n = 0
         for day in range(DAYS_1 + DAYS_2):
-            message_date = quit_date + timedelta(days=day)
+            message_date = quit_date + datetime.timedelta(days=day)
             if message_date == quit_date:
-                start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
+                start_time = datetime.datetime.combine(message_date, wake_time) + datetime.timedelta(hours=4)
             else:
-                start_time = datetime.combine(message_date, wake_time)
+                start_time = datetime.datetime.combine(message_date, wake_time)
 
             if message_date in booster_dates:
-                end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=4)
+                end_time = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=4)
             elif message_date in round2_dates:
-                end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+                end_time = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=3)
             else:
-                end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+                end_time = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=2)
 
             # Get times each day to send messages
             # Send 5 messages a day for the first 28 days, 4 after
@@ -333,7 +362,8 @@ class EventGenerator:
                                                    title=e.title,
                                                    start_time=e.time,
                                                    content=e.content,
-                                                   participants=participants))
+                                                   participants=participants,
+                                                   time_zone=time_zone))
 
             posted_events = self.apptoto.post_events(apptoto_events)
             self._update_events_file(posted_events)
@@ -413,7 +443,7 @@ class EventGenerator:
             return f'No messages sent for {self.participant_id}.'
 
         elif received.empty:
-            merged = sent.rename(columns = {'at':'at_sent', 'content':'content_sent', 'title':'title_sent'})
+            merged = sent.rename(columns={'at': 'at_sent', 'content': 'content_sent', 'title': 'title_sent'})
             merged['at_rec'] = pd.NaT
             merged['content_rec'] = np.NaN
 
@@ -442,7 +472,7 @@ class EventGenerator:
         cig_rec = len(cig_convos[~cig_convos.content_rec.isnull()]['participants.event_id'].unique())
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            response_rate = 100*(sms_rec + cig_rec)/(sms_sent + cig_sent)
+            response_rate = 100 * (sms_rec + cig_rec) / (sms_sent + cig_sent)
             cig_rr = 100 * cig_rec / cig_sent
             sms_rr = 100 * sms_rec / sms_sent
 
@@ -466,14 +496,14 @@ class EventGenerator:
 
     def delete_messages(self):
 
-        begin = datetime.now(timezone.utc)
+        begin = datetime.datetime.now(datetime.timezone.utc)
         """
         'new' way, currently too slow
         event_ids = self._get_event_ids()
         events = []
         for e_id in event_ids:
             events.append(self.apptoto.get_event(e_id))
-        future_ids = [e['id'] for e in events if datetime.fromisoformat(e['start_time']) > begin]
+        future_ids = [e['id'] for e in events if datetime.datetime.fromisoformat(e['start_time']) > begin]
         """
         """
         events = apptoto.get_events(begin=begin.isoformat(),
@@ -501,14 +531,14 @@ class EventGenerator:
         # Add or change phone & email to match redcap information
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
-        begin = datetime.now(timezone.utc)
-        event_ids = self._get_event_ids()
+        begin = datetime.datetime.now(datetime.timezone.utc)
 
-        # this would be the new way, never fully implemented
-        """  events = []
+        # this would be another way, never implemented
+        """event_ids = self._get_event_ids()
+          events = []
         for e_id in event_ids:
             events.append(self.apptoto.get_event(e_id))
-        events = [e for e in events if datetime.fromisoformat(e['start_time']) > begin]"""
+        events = [e for e in events if datetime.datetime.fromisoformat(e['start_time']) > begin]"""
 
         events = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
@@ -527,11 +557,19 @@ class EventGenerator:
         email = subject.redcap.s0.email
         initials = subject.redcap.s0.initials
 
+        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
+            time_zone = subject.redcap.s0.timezone
+        else:
+            time_zone = 'PT'
+        e_df.start_time = [change_tz(x, time_zone) for x in e_df.start_time]
+        e_df.end_time = [change_tz(x, time_zone) for x in e_df.end_time]
+
         # check email, phone against new values
         e_df['phone'] = [p[0]['normalized_phone'] for p in e_df.participants]
         e_df['email'] = [p[0]['email'] for p in e_df.participants]
+
         # originally we only changed if the phone/email changed, but we need to change the name too
-        # so just update all of them
+        # and time zone so just update all of them
         # e_df = e_df[(e_df.phone != phone) | (e_df.email != email)]
         e_df.drop(columns=['phone', 'email'], inplace=True)
         new_participant = {'name': initials, 'phone': phone, 'email': email, 'contact_external_id': subject.id}
@@ -595,4 +633,3 @@ class EventGenerator:
         # always update events regardless
         # That way if posting fails, we can just redo update_subject
         self.update_events()
-
