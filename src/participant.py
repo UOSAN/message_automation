@@ -10,6 +10,22 @@ class RedcapParticipant:
         data = project.export_records(events=['session_0_arm_1',
                                               'session_1_arm_1'],
                                       format_type='df')
-        self.id = subject_id
+
         self.redcap = data.loc[subject_id].rename(index=dict(session_0_arm_1='s0',
                                                              session_1_arm_1='s1')).transpose()
+
+        # changes to new redcap
+        meta = project.export_metadata(format_type='df')
+        if hasattr(self.redcap.s0, 'date_zs0'):
+            self.date_s0 = self.redcap.s0.date_zs0
+        else:
+            self.date_s0 = self.redcap.s0.date_s0
+
+        if hasattr(self.redcap.s0, 'timezone'):
+            tz_select = meta.loc['timezone'].select_choices_or_calculations
+            tz = [x[:2] for x in tz_select.split('| ')]
+            self.timezone = tz[int(self.redcap.s0.timezone)]
+        else:
+            self.timezone = 'PT'
+
+        self.id = subject_id

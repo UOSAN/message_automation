@@ -163,7 +163,7 @@ class EventGenerator:
                                     self.config['redcap_api_token'])
 
         # check that we have the required info from redcap
-        check_fields(subject, ['initials', 'phone', 'sleeptime', 'email', 'date_s0'])
+        check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
 
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
@@ -172,13 +172,10 @@ class EventGenerator:
         events = []
 
         # Diary round 1
-        round1_start = datetime.date.fromisoformat(subject.redcap.s0.date_s0) + datetime.timedelta(days=2)
+        round1_start = datetime.date.fromisoformat(subject.date_s0) + datetime.timedelta(days=2)
         round1_dates = get_diary_dates(round1_start)
         sleep_time = datetime.time.fromisoformat(subject.redcap.s0.sleeptime)
-        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
-            time_zone = subject.redcap.s0.timezone
-        else:
-            time_zone = 'PT'
+
         for day, message_date in enumerate(round1_dates):
             content = f'UO: Daily Diary #{day + 1}'
             title = f'ASH Daily Diary #{day + 1}'
@@ -186,7 +183,7 @@ class EventGenerator:
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
-                                       time_zone=time_zone,
+                                       time_zone=subject.timezone,
                                        content=content,
                                        participants=participants))
 
@@ -220,10 +217,7 @@ class EventGenerator:
         round3_start = datetime.date.fromisoformat(subject.redcap.s1.training_end) + datetime.timedelta(weeks=6)
         round3_dates = get_diary_dates(round3_start)
         sleep_time = datetime.time.fromisoformat(subject.redcap.s0.sleeptime)
-        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
-            time_zone = subject.redcap.s0.timezone
-        else:
-            time_zone = 'PT'
+
         for day, message_date in enumerate(round3_dates):
             content = f'UO: Daily Diary #{day + 9}'
             title = f'ASH Daily Diary #{day + 9}'
@@ -231,7 +225,7 @@ class EventGenerator:
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
-                                       time_zone=time_zone,
+                                       time_zone=subject.timezone,
                                        content=content,
                                        participants=participants))
 
@@ -272,11 +266,6 @@ class EventGenerator:
         quit_date = datetime.date.fromisoformat(subject.redcap.s0.quitdate)
         wake_time = datetime.time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = datetime.time.fromisoformat(subject.redcap.s0.sleeptime)
-
-        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
-            time_zone = subject.redcap.s0.timezone
-        else:
-            time_zone = 'PT'
 
         Event = namedtuple('Event', ['time', 'title', 'content'])
 
@@ -363,7 +352,7 @@ class EventGenerator:
                                                    start_time=e.time,
                                                    content=e.content,
                                                    participants=participants,
-                                                   time_zone=time_zone))
+                                                   time_zone=subject.timezone))
 
             posted_events = self.apptoto.post_events(apptoto_events)
             self._update_events_file(posted_events)
@@ -403,7 +392,7 @@ class EventGenerator:
     def get_conversations(self):
         """Get timestamp and content of all message to and from participant."""
 
-        begin = datetime(year=2021, month=4, day=1)
+        begin = datetime.datetime(year=2021, month=4, day=1)
         events = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID,
@@ -557,12 +546,8 @@ class EventGenerator:
         email = subject.redcap.s0.email
         initials = subject.redcap.s0.initials
 
-        if hasattr(subject.redcap.s0, 'timezone') and subject.redcap.s0.timezone:
-            time_zone = subject.redcap.s0.timezone
-        else:
-            time_zone = 'PT'
-        e_df.start_time = [change_tz(x, time_zone) for x in e_df.start_time]
-        e_df.end_time = [change_tz(x, time_zone) for x in e_df.end_time]
+        e_df.start_time = [change_tz(x, subject.timezone) for x in e_df.start_time]
+        e_df.end_time = [change_tz(x, subject.timezone) for x in e_df.end_time]
 
         # check email, phone against new values
         e_df['phone'] = [p[0]['normalized_phone'] for p in e_df.participants]
