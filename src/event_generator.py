@@ -55,7 +55,7 @@ def change_tz(time: str, tz: str):
 
     if tz not in time_zone_codes:
         raise ValueError('time zone code not supported')
-    newtime = oldtime.astimezone(zoneinfo.ZoneInfo(time_zone_codes[tz]))
+    newtime = oldtime.replace(tzinfo=zoneinfo.ZoneInfo(time_zone_codes[tz]))
 
     return newtime
 
@@ -187,6 +187,7 @@ class EventGenerator:
             content = f'UO: Daily Diary #{day + 1}'
             title = f'ASH Daily Diary #{day + 1}'
             message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=2)
+            print(message_datetime)
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
@@ -208,6 +209,7 @@ class EventGenerator:
         """
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
+
         # first check that we have the required info from redcap
         check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
 
@@ -533,6 +535,7 @@ class EventGenerator:
         # Add or change phone & email to match redcap information
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
+
         begin = datetime.datetime.now(datetime.timezone.utc)
 
         # this would be another way, never implemented
@@ -559,6 +562,7 @@ class EventGenerator:
         email = subject.redcap.s0.email
         initials = subject.redcap.s0.initials
 
+        # As far as I can tell, apptoto will NOT actually change the times when you put the events
         e_df.start_time = [change_tz(x, subject.timezone) for x in e_df.start_time]
         e_df.end_time = [change_tz(x, subject.timezone) for x in e_df.end_time]
 
@@ -573,6 +577,7 @@ class EventGenerator:
         new_participant = {'name': initials, 'phone': phone, 'email': email, 'contact_external_id': subject.id}
         e_df['participants'] = [[new_participant] for i in range(0, len(e_df))]
         updated_events = e_df.to_dict(orient='records')
+
         self.apptoto.put_events(updated_events)
 
         return f'Updated {len(updated_events)} events for subject {subject.id}'
