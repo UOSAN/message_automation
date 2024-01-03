@@ -206,11 +206,12 @@ def validate():
                 logger.info(f'{sessions[key]} found')
             else:
                 logger.info(f'{sessions[key]} not found')
-        return subject
 
     except Exception as err:
         logger.error(str(err))
         return 'invalid'
+
+    return subject
 
 
 @bp.route('/files', methods=['POST'])
@@ -237,7 +238,7 @@ def update():
         eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
                             participant_id=subject,
                             instance_path=Path(flask.current_app.instance_path))
-        future_response = executor.submit(eg.update_contact)
+        future_response = executor.submit(eg.update_contact, True)
         future_response.add_done_callback(done)
 
     except ValueError as err:

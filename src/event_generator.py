@@ -129,6 +129,8 @@ class EventGenerator:
         self.events_file = self.instance_path / 'events.json'
         self.message_file = self.instance_path / self.config['message_file']
 
+    # this file is created, but I never implemented its usage.
+    # This would replace searching all events by contact phone number
     def _update_events_file(self, events):
         event_ids = [e['id'] for e in events]
 
@@ -145,6 +147,8 @@ class EventGenerator:
         with open(self.events_file, 'w') as f:
             json.dump(all_events, f)
 
+    # See above comment -- I never switched things over to use this
+    # leaving it here in case we decide we need to
     def _get_event_ids(self):
         if self.events_file.exists():
             with open(self.events_file, 'r') as f:
@@ -164,6 +168,9 @@ class EventGenerator:
 
         # check that we have the required info from redcap
         check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
+
+        # update the contact if needed
+        self.update_contact()
 
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
@@ -207,6 +214,9 @@ class EventGenerator:
         if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.training_end):
             return f'Missing session1 training end date for {subject.id}'
 
+        # update the contact if needed
+        self.update_contact()
+
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
                                            subject.redcap.s0.email)]
@@ -246,6 +256,9 @@ class EventGenerator:
         # first check that we have the required info from redcap
         check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
                                'sleeptime', 'waketime', 'quitdate', 'email'])
+
+        # update the contact if needed
+        self.update_contact()
 
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
@@ -565,7 +578,7 @@ class EventGenerator:
         return f'Updated {len(updated_events)} events for subject {subject.id}'
 
     # do we need to check primary phone/email?
-    def update_contact(self):
+    def update_contact(self, update_events=False):
 
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
@@ -589,6 +602,7 @@ class EventGenerator:
             phone_numbers = [p.get('normalized') for p in contact.get('phone_numbers')]
             email_addresses = [e.get('address') for e in contact.get('email_addresses')]
             contact_name = contact['name']
+            # do we need to update events for this contact?
             need_to_update = False
             if phone not in phone_numbers:
                 logger.info(f'Adding new phone for {subject.id} to apptoto address book')
@@ -615,6 +629,5 @@ class EventGenerator:
                                    'email_addresses': contact.get('email_addresses')}
                 self.apptoto.put_contact(updated_contact)
 
-        # always update events regardless
-        # That way if posting fails, we can just redo update_subject
-        self.update_events()
+            if need_to_update or update_events:
+                self.update_events()
