@@ -234,6 +234,7 @@ class EventGenerator:
             content = f'UO: Daily Diary #{day + 9}'
             title = f'ASH Daily Diary #{day + 9}'
             message_datetime = datetime.datetime.combine(message_date, sleep_time) - datetime.timedelta(hours=2)
+            print(message_datetime)
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
