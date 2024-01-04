@@ -7,7 +7,6 @@ import jsonpickle
 import requests
 from requests.auth import HTTPBasicAuth
 
-from src.constants import MAX_EVENTS, MAX_POST
 from src.mylogging import DEFAULT_LOGGING
 
 logging.config.dictConfig(DEFAULT_LOGGING)
@@ -32,7 +31,6 @@ class ApptotoParticipant:
         self.email = email
         self.contact_id = id
         self.contact_external_id = external_id
-
 
 
 class ApptotoEvent:
@@ -77,6 +75,16 @@ class ApptotoError(Exception):
 
 
 class Apptoto:
+    MAX_EVENTS = 200  # Max number of events to retrieve at one time
+    # MAX_POST = 20 # Max number of events to post at one time
+    MAX_POST = 1  # otherwise time zone isn't used correctly
+    TIMEOUT = 240
+    # seconds between requests for apptoto burst rate limit, 100 requests per minute
+    # minimum = 0.6
+    REQUEST_LIMIT = 0.6
+    ENDPOINT = 'https://api.apptoto.com/v1'
+    HEADERS = {'Content-Type': 'application/json'}
+
     def __init__(self, api_token: str, user: str):
         """
         Create an Apptoto instance.
@@ -84,15 +92,8 @@ class Apptoto:
         :param api_token: Apptoto API token
         :param user: Apptoto user name
         """
-        self._endpoint = 'https://api.apptoto.com/v1'
         self._api_token = api_token
         self._user = user
-        self._headers = {'Content-Type': 'application/json'}
-        self._timeout = 240
-
-        # seconds between requests for apptoto burst rate limit, 100 requests per minute
-        # minimum = 0.6
-        self._request_limit = 0.6
         self._last_request_time = time.time()
 
     def post_events(self, events: list):
@@ -101,11 +102,11 @@ class Apptoto:
 
         :param events: List of events to create
         """
-        url = f'{self._endpoint}/events'
+        url = f'{self.ENDPOINT}/events'
 
         # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
-        num_events = MAX_POST
+        num_events = self.MAX_POST
         posted_events = []
         for i in range(0, len(events), num_events):
             events_slice = events[i:i + num_events]
@@ -114,13 +115,13 @@ class Apptoto:
             logger.info('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
                                                                                len(events)))
 
-            while (time.time() - self._last_request_time) < self._request_limit:
+            while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
                 time.sleep(0.1)
 
             r = requests.post(url=url,
                               data=request_data,
-                              headers=self._headers,
-                              timeout=self._timeout,
+                              headers=self.HEADERS,
+                              timeout=self.TIMEOUT,
                               auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
             self._last_request_time = time.time()
@@ -137,16 +138,16 @@ class Apptoto:
         return posted_events
 
     def delete_event(self, event_id: int):
-        url = f'{self._endpoint}/events'
+        url = f'{self.ENDPOINT}/events'
         params = {'id': event_id}
 
-        while (time.time() - self._last_request_time) < self._request_limit:
+        while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
             time.sleep(0.1)
 
         r = requests.delete(url=url,
                             params=params,
-                            headers=self._headers,
-                            timeout=self._timeout,
+                            headers=self.HEADERS,
+                            timeout=self.TIMEOUT,
                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
         self._last_request_time = time.time()
@@ -155,16 +156,16 @@ class Apptoto:
             raise ApptotoError('Failed to delete event {}: error {}'.format(event_id, r.status_code))
 
     def get_event(self, event_id, include_conversations=False):
-        url = f'{self._endpoint}/event'
+        url = f'{self.ENDPOINT}/event'
 
         params = {'id': event_id, 'include_conversations': include_conversations}
 
-        while (time.time() - self._last_request_time) < self._request_limit:
+        while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
             time.sleep(0.1)
         r = requests.get(url=url,
                          params=params,
-                         headers=self._headers,
-                         timeout=self._timeout,
+                         headers=self.HEADERS,
+                         timeout=self.TIMEOUT,
                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
         self._last_request_time = time.time()
@@ -175,12 +176,12 @@ class Apptoto:
     # this is just for while I'm working on things -- change max to a big number when not testing
     # otherwise sometimes I mess up and retrieve EVERYTHING from all users and it's a pain
     def get_events(self, max_to_retrieve=9999, **kwargs):
-        url = f'{self._endpoint}/events'
+        url = f'{self.ENDPOINT}/events'
 
         events = []
         page = 0
 
-        kwargs['page_size'] = MAX_EVENTS
+        kwargs['page_size'] = self.MAX_EVENTS
 
         while True:
             page += 1
@@ -190,13 +191,13 @@ class Apptoto:
             attempts = 0
 
             while not r and attempts < 5:
-                while (time.time() - self._last_request_time) < self._request_limit:
+                while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
                     time.sleep(0.1)
 
                 r = requests.get(url=url,
                                  params=kwargs,
-                                 headers=self._headers,
-                                 timeout=self._timeout,
+                                 headers=self.HEADERS,
+                                 timeout=self.TIMEOUT,
                                  auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
                 self._last_request_time = time.time()
@@ -221,12 +222,12 @@ class Apptoto:
 
     # ex: get_contact(external_id='TAG999')
     def get_contact(self, **kwargs):
-        url = f'{self._endpoint}/contact'
+        url = f'{self.ENDPOINT}/contact'
 
         r = requests.get(url=url,
                          params=kwargs,
-                         headers=self._headers,
-                         timeout=self._timeout,
+                         headers=self.HEADERS,
+                         timeout=self.TIMEOUT,
                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
         if r.status_code == requests.codes.ok:
@@ -241,18 +242,18 @@ class Apptoto:
         :contact must include name, address_book
         :see apptoto api docs for full info
         """
-        url = f'{self._endpoint}/contacts'
+        url = f'{self.ENDPOINT}/contacts'
 
         request_data = jsonpickle.encode({'contacts': [contact]}, unpicklable=False)
         logger.info(f"Posting contact {contact['name']} to apptoto")
 
-        while (time.time() - self._last_request_time) < self._request_limit:
+        while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
             time.sleep(0.1)
 
         r = requests.post(url=url,
                           data=request_data,
-                          headers=self._headers,
-                          timeout=self._timeout,
+                          headers=self.HEADERS,
+                          timeout=self.TIMEOUT,
                           auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
         self._last_request_time = time.time()
@@ -268,18 +269,18 @@ class Apptoto:
         must include id or external_id to update existing contact
         see apptoto api docs for full info
         """
-        url = f'{self._endpoint}/contacts'
+        url = f'{self.ENDPOINT}/contacts'
 
         request_data = jsonpickle.encode({'contacts': [contact]}, unpicklable=False)
         logger.info('Updating contact {} in apptoto'.format(contact['name']))
 
-        while (time.time() - self._last_request_time) < self._request_limit:
+        while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
             time.sleep(0.1)
 
         r = requests.put(url=url,
                          data=request_data,
-                         headers=self._headers,
-                         timeout=self._timeout,
+                         headers=self.HEADERS,
+                         timeout=self.TIMEOUT,
                          auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
         self._last_request_time = time.time()
@@ -314,11 +315,11 @@ class Apptoto:
 
         :param events: List of events to update
         """
-        url = f'{self._endpoint}/events'
+        url = f'{self.ENDPOINT}/events'
 
         # Post num_events events at a time because Apptoto's API can't handle all events at once.
         # Too many events results in "bad gateway" error
-        num_events = MAX_POST
+        num_events = self.MAX_POST
         for i in range(0, len(events), num_events):
             events_slice = events[i:i + num_events]
             request_data = jsonpickle.encode({'events': events_slice, 'prevent_calendar_creation': True},
@@ -331,13 +332,13 @@ class Apptoto:
             remaining_attempts = max_attempts
             success = False
             while remaining_attempts and not success:
-                while (time.time() - self._last_request_time) < self._request_limit:
+                while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
                     time.sleep(0.1)
 
                 r = requests.put(url=url,
                                  data=request_data,
-                                 headers=self._headers,
-                                 timeout=self._timeout,
+                                 headers=self.HEADERS,
+                                 timeout=self.TIMEOUT,
                                  auth=HTTPBasicAuth(username=self._user, password=self._api_token))
 
                 self._last_request_time = time.time()
