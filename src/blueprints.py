@@ -19,6 +19,7 @@ if not Path(DOWNLOAD_DIR).exists():
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
 
+
 def done(fn):
     if fn.cancelled():
         logger.info('Operation cancelled')

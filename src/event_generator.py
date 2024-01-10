@@ -16,7 +16,7 @@ from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition, CodedValues
 from src.participant import RedcapParticipant
 from src.message import Messages
-from src.constants import DOWNLOAD_DIR, ASH_CALENDAR_ID
+from src.constants import DOWNLOAD_DIR, ASH_CALENDAR_ID, TZ_CODES
 
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
@@ -47,16 +47,13 @@ ITI = [
     1.0
 ]
 
-time_zone_codes = {'PT': 'US/Pacific', 'MT': 'US/Mountain', 'CT': 'US/Central', 'ET': 'US/Eastern',
-                   'AZ': 'US/Arizona', 'HI': 'US/Hawaii'}
-
 
 def change_tz(iso_dt: str, tz: str):
     oldtime = datetime.fromisoformat(iso_dt)
 
-    if tz not in time_zone_codes:
+    if tz not in TZ_CODES:
         raise ValueError('time zone code not supported')
-    newtime = oldtime.replace(tzinfo=zoneinfo.ZoneInfo(time_zone_codes[tz]))
+    newtime = oldtime.replace(tzinfo=zoneinfo.ZoneInfo(TZ_CODES[tz]))
 
     return newtime
 
@@ -259,9 +256,11 @@ class EventGenerator:
                                     self.config['redcap_api_token'])
 
         # first check that we have the required info from redcap
-        # note that we currently only check s0 values even though we also need s1.quitdate
         check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
                                'sleeptime', 'waketime', 'email'])
+
+        if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.quitdate):
+            return f'Missing quit date for {subject.id}'
 
         # update the contact if needed
         self.update_contact()
@@ -391,6 +390,8 @@ class EventGenerator:
         check_fields(subject, ['value1_s0', 'value7_s0'])
 
         csv_path = Path(DOWNLOAD_DIR)
+        if not csv_path.exists():
+            csv_path.mkdir(parents=True)
         task_values = [CodedValues(int(subject.redcap.s0.value1_s0)),
                        CodedValues(int(subject.redcap.s0.value7_s0))]
 
@@ -540,6 +541,7 @@ class EventGenerator:
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
 
+
         begin = datetime.now(timezone.utc)
 
         # this would be another way, never implemented
@@ -566,11 +568,14 @@ class EventGenerator:
         email = subject.redcap.s0.email
         initials = subject.redcap.s0.initials
 
-        # TESTING
-        # subject.redcap.s0.timezone = 'ET'
-        # e_df['title'] = 'test update'
+        #TESTING
+        #subject.redcap.s0.timezone = 'ET'
+        #e_df['title'] = 'test update'
+        #print(e_df.start_time)
+        #e_df.start_time = [datetime.fromisoformat(x) - timedelta(hours=5) for x in e_df.start_time]
 
         # As far as I can tell, apptoto will NOT actually change the times when you put the events
+        # So this currently does not do anything
         e_df.start_time = [change_tz(x, subject.redcap.s0.timezone) for x in e_df.start_time]
         e_df.end_time = [change_tz(x, subject.redcap.s0.timezone) for x in e_df.end_time]
 

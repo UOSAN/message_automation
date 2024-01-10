@@ -2,19 +2,21 @@ from datetime import datetime
 import time
 from typing import List
 import logging.config
-
+import zoneinfo
 import jsonpickle
 import requests
 from requests.auth import HTTPBasicAuth
 
 from src.mylogging import DEFAULT_LOGGING
+from src.constants import TZ_CODES
+
 
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
 
 
 class ApptotoParticipant:
-    def __init__(self, name=None, phone=None, email=None, id=None, external_id=None):
+    def __init__(self, name=None, phone=None, email=None, apptoto_id=None, external_id=None):
         """
         Create an ApptotoParticipant.
 
@@ -29,7 +31,7 @@ class ApptotoParticipant:
         self.name = name
         self.phone = phone
         self.email = email
-        self.contact_id = id
+        self.contact_id = apptoto_id
         self.contact_external_id = external_id
 
 
@@ -53,13 +55,13 @@ class ApptotoEvent:
         """
         self.calendar = calendar
         self.title = title
-        self.start_time = start_time.isoformat()
+        tzinfo = zoneinfo.ZoneInfo(TZ_CODES[time_zone])
+        self.start_time = (start_time.replace(tzinfo=tzinfo)).isoformat()
         if not end_time:
-            self.end_time = start_time.isoformat()
+            self.end_time = self.start_time
         else:
-            self.end_time = end_time.isoformat()
+            self.end_time = (end_time.replace(tzinfo=tzinfo)).isoformat()
         self.content = content
-        self.time_zone = time_zone
         self.participants = participants
         self.external_id = external_id
 
@@ -76,8 +78,7 @@ class ApptotoError(Exception):
 
 class Apptoto:
     MAX_EVENTS = 200  # Max number of events to retrieve at one time
-    # MAX_POST = 20 # Max number of events to post at one time
-    MAX_POST = 1  # otherwise time zone isn't used correctly
+    MAX_POST = 20 # Max number of events to post at one time
     TIMEOUT = 240
     # seconds between requests for apptoto burst rate limit, 100 requests per minute
     # minimum = 0.6
