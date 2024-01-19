@@ -1,6 +1,7 @@
 import random
 from collections import namedtuple
 from datetime import datetime, timedelta, date, time, timezone
+import zoneinfo
 from pathlib import Path
 from typing import List
 import logging.config
@@ -15,7 +16,7 @@ from src.constants import DAYS_1, DAYS_2, MESSAGES_PER_DAY_1, MESSAGES_PER_DAY_2
 from src.enums import Condition, CodedValues
 from src.participant import RedcapParticipant
 from src.message import Messages
-from src.constants import DOWNLOAD_DIR, ASH_CALENDAR_ID
+from src.constants import DOWNLOAD_DIR, ASH_CALENDAR_ID, TZ_CODES
 
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
@@ -45,6 +46,16 @@ ITI = [
     2.1,
     1.0
 ]
+
+
+def change_tz(iso_dt: str, tz: str):
+    oldtime = datetime.fromisoformat(iso_dt)
+
+    if tz not in TZ_CODES:
+        raise ValueError('time zone code not supported')
+    newtime = oldtime.replace(tzinfo=zoneinfo.ZoneInfo(TZ_CODES[tz]))
+
+    return newtime
 
 
 # see stack overflow 51918580
@@ -116,6 +127,8 @@ class EventGenerator:
         self.events_file = self.instance_path / 'events.json'
         self.message_file = self.instance_path / self.config['message_file']
 
+    # this file is created, but I never implemented its usage.
+    # This would replace searching all events by contact phone number
     def _update_events_file(self, events):
         event_ids = [e['id'] for e in events]
 
@@ -132,6 +145,8 @@ class EventGenerator:
         with open(self.events_file, 'w') as f:
             json.dump(all_events, f)
 
+    # See above comment -- I never switched things over to use this
+    # leaving it here in case we decide we need to
     def _get_event_ids(self):
         if self.events_file.exists():
             with open(self.events_file, 'r') as f:
@@ -150,7 +165,10 @@ class EventGenerator:
                                     self.config['redcap_api_token'])
 
         # check that we have the required info from redcap
-        check_fields(subject, ['initials', 'phone', 'sleeptime', 'email', 'date_s0'])
+        check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
+
+        # update the contact if needed
+        self.update_contact()
 
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
@@ -159,16 +177,19 @@ class EventGenerator:
         events = []
 
         # Diary round 1
-        round1_start = date.fromisoformat(subject.redcap.s0.date_s0) + timedelta(days=2)
+        round1_start = date.fromisoformat(subject.redcap.s0.date_zs0) + timedelta(days=2)
         round1_dates = get_diary_dates(round1_start)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+
         for day, message_date in enumerate(round1_dates):
             content = f'UO: Daily Diary #{day + 1}'
             title = f'ASH Daily Diary #{day + 1}'
             message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+            print(message_datetime)
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
+                                       time_zone=subject.redcap.s0.timezone,
                                        content=content,
                                        participants=participants))
 
@@ -186,11 +207,15 @@ class EventGenerator:
         """
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
+
         # first check that we have the required info from redcap
         check_fields(subject, ['initials', 'phone', 'sleeptime', 'email'])
 
         if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.training_end):
             return f'Missing session1 training end date for {subject.id}'
+
+        # update the contact if needed
+        self.update_contact()
 
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
@@ -202,13 +227,16 @@ class EventGenerator:
         round3_start = date.fromisoformat(subject.redcap.s1.training_end) + timedelta(weeks=6)
         round3_dates = get_diary_dates(round3_start)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+
         for day, message_date in enumerate(round3_dates):
             content = f'UO: Daily Diary #{day + 9}'
             title = f'ASH Daily Diary #{day + 9}'
             message_datetime = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+            print(message_datetime)
             events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
                                        title=title,
                                        start_time=message_datetime,
+                                       time_zone=subject.redcap.s0.timezone,
                                        content=content,
                                        participants=participants))
 
@@ -226,9 +254,16 @@ class EventGenerator:
         """
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
+
         # first check that we have the required info from redcap
         check_fields(subject, ['value1_s0', 'value2_s0', 'initials', 'phone',
-                               'sleeptime', 'waketime', 'quitdate', 'email'])
+                               'sleeptime', 'waketime', 'email'])
+
+        if 's1' not in subject.redcap or pd.isnull(subject.redcap.s1.quitdate):
+            return f'Missing quit date for {subject.id}'
+
+        # update the contact if needed
+        self.update_contact()
 
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
@@ -246,14 +281,15 @@ class EventGenerator:
                                      message_values,
                                      num_required_messages)
 
-        quit_date = date.fromisoformat(subject.redcap.s0.quitdate)
+        quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
 
         Event = namedtuple('Event', ['time', 'title', 'content'])
 
         # Add quit_message_date date boosters 3 hrs after wake time
-        message_datetime = datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
+        message_datetime = datetime.combine(quit_date - timedelta(days=1),
+                                            wake_time) + timedelta(hours=3)
         events.append(Event(time=message_datetime, title='UO: Day Before', content='UO: Day Before Quitting'))
         message_datetime = datetime.combine(quit_date, wake_time) + timedelta(hours=3)
         events.append(Event(time=message_datetime, title='UO: Quit Date', content='UO: Quit Date'))
@@ -333,7 +369,8 @@ class EventGenerator:
                                                    title=e.title,
                                                    start_time=e.time,
                                                    content=e.content,
-                                                   participants=participants))
+                                                   participants=participants,
+                                                   time_zone=subject.redcap.s0.timezone))
 
             posted_events = self.apptoto.post_events(apptoto_events)
             self._update_events_file(posted_events)
@@ -353,6 +390,8 @@ class EventGenerator:
         check_fields(subject, ['value1_s0', 'value7_s0'])
 
         csv_path = Path(DOWNLOAD_DIR)
+        if not csv_path.exists():
+            csv_path.mkdir(parents=True)
         task_values = [CodedValues(int(subject.redcap.s0.value1_s0)),
                        CodedValues(int(subject.redcap.s0.value7_s0))]
 
@@ -413,7 +452,7 @@ class EventGenerator:
             return f'No messages sent for {self.participant_id}.'
 
         elif received.empty:
-            merged = sent.rename(columns = {'at':'at_sent', 'content':'content_sent', 'title':'title_sent'})
+            merged = sent.rename(columns={'at': 'at_sent', 'content': 'content_sent', 'title': 'title_sent'})
             merged['at_rec'] = pd.NaT
             merged['content_rec'] = np.NaN
 
@@ -442,7 +481,7 @@ class EventGenerator:
         cig_rec = len(cig_convos[~cig_convos.content_rec.isnull()]['participants.event_id'].unique())
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            response_rate = 100*(sms_rec + cig_rec)/(sms_sent + cig_sent)
+            response_rate = 100 * (sms_rec + cig_rec) / (sms_sent + cig_sent)
             cig_rr = 100 * cig_rec / cig_sent
             sms_rr = 100 * sms_rec / sms_sent
 
@@ -501,11 +540,13 @@ class EventGenerator:
         # Add or change phone & email to match redcap information
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
-        begin = datetime.now(timezone.utc)
-        event_ids = self._get_event_ids()
 
-        # this would be the new way, never fully implemented
-        """  events = []
+
+        begin = datetime.now(timezone.utc)
+
+        # this would be another way, never implemented
+        """event_ids = self._get_event_ids()
+          events = []
         for e_id in event_ids:
             events.append(self.apptoto.get_event(e_id))
         events = [e for e in events if datetime.fromisoformat(e['start_time']) > begin]"""
@@ -527,22 +568,35 @@ class EventGenerator:
         email = subject.redcap.s0.email
         initials = subject.redcap.s0.initials
 
+        #TESTING
+        #subject.redcap.s0.timezone = 'ET'
+        #e_df['title'] = 'test update'
+        #print(e_df.start_time)
+        #e_df.start_time = [datetime.fromisoformat(x) - timedelta(hours=5) for x in e_df.start_time]
+
+        # As far as I can tell, apptoto will NOT actually change the times when you put the events
+        # So this currently does not do anything
+        e_df.start_time = [change_tz(x, subject.redcap.s0.timezone) for x in e_df.start_time]
+        e_df.end_time = [change_tz(x, subject.redcap.s0.timezone) for x in e_df.end_time]
+
         # check email, phone against new values
         e_df['phone'] = [p[0]['normalized_phone'] for p in e_df.participants]
         e_df['email'] = [p[0]['email'] for p in e_df.participants]
+
         # originally we only changed if the phone/email changed, but we need to change the name too
-        # so just update all of them
+        # and time zone so just update all of them
         # e_df = e_df[(e_df.phone != phone) | (e_df.email != email)]
         e_df.drop(columns=['phone', 'email'], inplace=True)
         new_participant = {'name': initials, 'phone': phone, 'email': email, 'contact_external_id': subject.id}
         e_df['participants'] = [[new_participant] for i in range(0, len(e_df))]
         updated_events = e_df.to_dict(orient='records')
+
         self.apptoto.put_events(updated_events)
 
         return f'Updated {len(updated_events)} events for subject {subject.id}'
 
     # do we need to check primary phone/email?
-    def update_contact(self):
+    def update_contact(self, update_events=False):
 
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
@@ -566,6 +620,7 @@ class EventGenerator:
             phone_numbers = [p.get('normalized') for p in contact.get('phone_numbers')]
             email_addresses = [e.get('address') for e in contact.get('email_addresses')]
             contact_name = contact['name']
+            # do we need to update events for this contact?
             need_to_update = False
             if phone not in phone_numbers:
                 logger.info(f'Adding new phone for {subject.id} to apptoto address book')
@@ -592,7 +647,5 @@ class EventGenerator:
                                    'email_addresses': contact.get('email_addresses')}
                 self.apptoto.put_contact(updated_contact)
 
-        # always update events regardless
-        # That way if posting fails, we can just redo update_subject
-        self.update_events()
-
+            if need_to_update or update_events:
+                self.update_events()

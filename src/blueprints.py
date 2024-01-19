@@ -200,18 +200,18 @@ def validate():
                                                flask.current_app.config['AUTOMATIONCONFIG']['redcap_api_token'])
         logger.info(f'{subject} found in RedCap')
         sessions = dict(s0='Session 0',
-                        s1='Session 1',
-                        s2='Session 2')
+                        s1='Session 1')
         for key in sessions:
             if key in redcap_participant.redcap:
                 logger.info(f'{sessions[key]} found')
             else:
                 logger.info(f'{sessions[key]} not found')
-        return subject
 
     except Exception as err:
         logger.error(str(err))
         return 'invalid'
+
+    return subject
 
 
 @bp.route('/files', methods=['POST'])
@@ -238,7 +238,7 @@ def update():
         eg = EventGenerator(config=flask.current_app.config['AUTOMATIONCONFIG'],
                             participant_id=subject,
                             instance_path=Path(flask.current_app.instance_path))
-        future_response = executor.submit(eg.update_contact)
+        future_response = executor.submit(eg.update_contact, True)
         future_response.add_done_callback(done)
 
     except ValueError as err:
