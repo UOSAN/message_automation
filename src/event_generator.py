@@ -432,6 +432,8 @@ class EventGenerator:
                                                 ['participants', 'event_id']])
 
         csv_path = Path(DOWNLOAD_DIR)
+        if conversations.empty:
+            return f'No conversatinos found for {self.participant_id}.'
 
         conversations = conversations[conversations.calendar_id == ASH_CALENDAR_ID]
         conversations['start_time'] = pd.to_datetime(conversations['start_time'])
@@ -601,7 +603,10 @@ class EventGenerator:
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
 
-        phone = normalize_phone(subject.redcap.s0.phone)
+        if isinstance(subject.redcap.s0.phone, str):
+            phone = normalize_phone(subject.redcap.s0.phone)
+        else:
+            phone = ''
         email = subject.redcap.s0.email
         initials = subject.redcap.s0.initials
 
@@ -636,10 +641,14 @@ class EventGenerator:
                     contact['email_addresses'][i]['is_primary'] = False
                 contact['email_addresses'].append({'address': email, 'is_primary': True})
 
-            if contact_name == subject.id:
-                logger.info(f'Changing name to initials for {subject.id} in apptoto address book')
-                contact_name = initials
-                need_to_update = True
+            ## these have been dealt with and shouldn't exist anymore
+            #if contact_name == subject.id:
+            #    logger.info(f'Changing name to initials {initials} for {subject.id} in apptoto address book')
+            #    if isinstance(initials, str):
+            #        contact_name = initials
+            #        need_to_update = True
+            #   else:
+            #        return 
 
             if need_to_update:
                 updated_contact = {'external_id': subject.id, 'name': contact_name, 'address_book': 'ASH',

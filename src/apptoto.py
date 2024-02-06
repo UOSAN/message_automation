@@ -10,7 +10,6 @@ from requests.auth import HTTPBasicAuth
 from src.mylogging import DEFAULT_LOGGING
 from src.constants import TZ_CODES
 
-
 logging.config.dictConfig(DEFAULT_LOGGING)
 logger = logging.getLogger(__name__)
 
@@ -78,7 +77,7 @@ class ApptotoError(Exception):
 
 class Apptoto:
     MAX_EVENTS = 200  # Max number of events to retrieve at one time
-    MAX_POST = 20 # Max number of events to post at one time
+    MAX_POST = 20  # Max number of events to post at one time
     TIMEOUT = 240
     # seconds between requests for apptoto burst rate limit, 100 requests per minute
     # minimum = 0.6
@@ -173,7 +172,7 @@ class Apptoto:
         if r.status_code == requests.codes.ok:
             return r.json()
 
-    # TODO
+    # max_to_retrieve
     # this is just for while I'm working on things -- change max to a big number when not testing
     # otherwise sometimes I mess up and retrieve EVERYTHING from all users and it's a pain
     def get_events(self, max_to_retrieve=9999, **kwargs):
@@ -273,6 +272,12 @@ class Apptoto:
         url = f'{self.ENDPOINT}/contacts'
 
         request_data = jsonpickle.encode({'contacts': [contact]}, unpicklable=False)
+
+        if not isinstance(contact['name'], str):
+            print('contact has no name')
+            print(contact)
+            return
+
         logger.info('Updating contact {} in apptoto'.format(contact['name']))
 
         while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
@@ -357,3 +362,90 @@ class Apptoto:
 
                 logger.error(f'Failed to update events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to update events: {}'.format(r.status_code))
+
+    def get_all_contacts(self, address_book_name=None):
+        params = {'page_size': self.MAX_EVENTS}
+        book_id = None
+
+        if address_book_name:
+            url = f'{self.ENDPOINT}/address_books'
+
+            r = requests.get(url=url,
+                             headers=self.HEADERS,
+                             timeout=self.TIMEOUT,
+                             auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+            if r.status_code != requests.codes.ok:
+                raise ApptotoError('Failed to get apptoto address books: {}'.format(r.status_code))
+
+            book_id = next(x['id'] for x in r.json()['address_books'] if x['name'] == address_book_name)
+            params['address_book_id'] = book_id
+            # unfortunately address_book_id appears to be broken so this doesn't actually work
+
+        url = f'{self.ENDPOINT}/contacts'
+
+        contacts = []
+        page = 0
+
+        while True:
+            page += 1
+            params['page'] = page
+
+            r = None
+            attempts = 0
+
+            while not r and attempts < 5:
+                while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
+                    time.sleep(0.1)
+
+                r = requests.get(url=url,
+                                 params=params,
+                                 headers=self.HEADERS,
+                                 timeout=self.TIMEOUT,
+                                 auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+                self._last_request_time = time.time()
+                attempts = attempts + 1
+
+            if r.status_code == requests.codes.ok:
+                new_contacts = r.json()['contacts']
+
+            else:
+                raise ApptotoError('Failed to get contacts: {}'.format(r.status_code))
+
+            if new_contacts:
+                contacts.extend(new_contacts)
+                logger.info('Found {} contacts'.format(len(contacts)))
+            else:
+                break
+
+        if book_id:
+            contacts = [x for x in contacts if x['address_book_id'] == book_id]
+
+        return contacts
+
+    def delete_contact(self, apptoto_id):
+        """
+        delete contact in /v1/contacts API
+        :param apptoto_id: contact to delete
+        see apptoto api docs for full info
+        """
+        url = f'{self.ENDPOINT}/contacts'
+
+        request_data = jsonpickle.encode({'id': apptoto_id}, unpicklable=False)
+
+        # slowed this down because I was hitting burst rate limits
+        while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
+            time.sleep(0.3)
+
+        r = requests.delete(url=url,
+                            data=request_data,
+                            headers=self.HEADERS,
+                            timeout=self.TIMEOUT,
+                            auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+        self._last_request_time = time.time()
+
+        if r.status_code != requests.codes.ok:
+            logger.error(f'Failed to delete contact - {str(r.status_code)} - {str(r.content)}')
+            raise ApptotoError('Failed to delete contact: {}'.format(r.status_code))
