@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import re
 import json
+import time as tm
 
 from src.mylogging import DEFAULT_LOGGING
 from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant, ApptotoError
@@ -530,6 +531,7 @@ class EventGenerator:
         logger.info(f'Found {len(event_ids)} events for {self.participant_id}')
 
         deleted = 0
+
         for event_id in event_ids:
             self.apptoto.delete_event(event_id)
             deleted += 1
@@ -542,7 +544,6 @@ class EventGenerator:
         # Add or change phone & email to match redcap information
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
-
 
         begin = datetime.now(timezone.utc)
 
