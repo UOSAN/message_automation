@@ -3,15 +3,16 @@ from flask import Flask
 from src.executor import executor
 from .blueprints import bp
 from flask_sqlalchemy import SQLAlchemy
-from flask_security import Security, SQLAlchemySessionUserDatastore, hash_password
+from flask_security import Security, SQLAlchemyUserDatastore, hash_password
 from flask_security.models import fsqla_v3 as fsqla
+import os
 
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
 
     executor.init_app(app)
-    app.secret_key = secrets.token_urlsafe(64)
+    #app.secret_key = secrets.token_urlsafe(64)
 
     if test_config is None:
         app.config.from_envvar('MESSAGE_AUTOMATION_SETTINGS')
@@ -20,11 +21,12 @@ def create_app(test_config=None):
         app.config.from_mapping(test_config)
 
     # get security key, replace with environment variable from secrets.token_urlsafe()
-    app.config['SECRET_KEY'] = app.config.from_envvar("SECRET_KEY",'a11sm226j8oXjGECf7NgJs5ZbCK_OzWbw1pc5KRrWik')
+    app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", 'Dev')
     # get password salt, replace with environment variable from secrets.SystemRandom().getrandbits(128)
-    app.config['SECURITY_PASSWORD_SALT'] = app.config.from_envvar("SECURITY_PASSWORD_SALT", '137874679584510511859835183498768811669')
+    app.config['SECURITY_PASSWORD_SALT'] = os.environ.get("SECURITY_PASSWORD_SALT",
+                                                          '137874679584510511859835183498768811669')
 
-    # remember cookie and sessin cookie
+    # remember cookie and session cookie
     app.config["REMEMBER_COOKIE_SAMESITE"] = "strict"
     app.config["SESSION_COOKIE_SAMESITE"] = "strict"
 
@@ -48,15 +50,16 @@ def create_app(test_config=None):
         pass
 
     # security setup
-    user_datastore = SQLAlchemySessionUserDatastore(db, User, Role)
+    user_datastore = SQLAlchemyUserDatastore(db, User, Role)
     app.security = Security(app, user_datastore)
 
     # one time setup of user login info
     with app.app_context():
         db.create_all()
         # testing info, replace with envvar     ! ! ! EXTREMELY IMPORTANT TO DO ! ! !
-        if not app.security.datastore.find_user(email=app.config.from_envvar("LOGIN_EMAIL", "Test@email.com")):
-            app.security.datastore.create_user(email=app.config.from_envvar("LOGIN_EMAIL", "Test@email.com"), password=hash_password(app.config.from_envvar("LOGIN_PASS", "Password1!")))
+        if not app.security.datastore.find_user(email=os.environ.get("LOGIN_EMAIL", "Test@email.com")):
+            app.security.datastore.create_user(email=os.environ.get("LOGIN_EMAIL", "Test@email.com"),
+                                               password=hash_password(os.environ.get("LOGIN_PASS", "Password1!")))
         db.session.commit()
 
     app.config['EXECUTOR_TYPE'] = 'thread'
