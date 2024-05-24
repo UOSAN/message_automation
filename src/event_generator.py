@@ -484,9 +484,9 @@ class EventGenerator:
         cig_rec = len(cig_convos[~cig_convos.content_rec.isnull()]['participants.event_id'].unique())
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            response_rate = 100 * (sms_rec + cig_rec) / (sms_sent + cig_sent)
-            cig_rr = 100 * cig_rec / cig_sent
-            sms_rr = 100 * sms_rec / sms_sent
+            response_rate = 100 * np.divide((sms_rec + cig_rec), (sms_sent + cig_sent))
+            cig_rr = 100 * np.divide(cig_rec, cig_sent)
+            sms_rr = 100 * np.divide(sms_rec, sms_sent)
 
         with open(csv_path / f'{self.participant_id}_summary.txt', 'w') as f:
             f.write(f'SMS messages sent: {sms_sent}\n')
