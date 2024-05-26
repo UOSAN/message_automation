@@ -11,6 +11,8 @@ from src.executor import executor
 from src.constants import DOWNLOAD_DIR
 from src.event_generator import EventGenerator
 
+from flask_security import auth_required
+
 bp = flask.Blueprint('blueprints', __name__)
 auto_bp = flask.Blueprint('auto_bp', __name__)
 if not Path(DOWNLOAD_DIR).exists():
@@ -43,6 +45,7 @@ def get_subject():
 
 
 @bp.route('/diary1', methods=['POST'])
+@auth_required()
 def diary1():
     subject = get_subject()
     if not subject:
@@ -63,6 +66,7 @@ def diary1():
 
 
 @bp.route('/diary3', methods=['POST'])
+@auth_required()
 def diary2():
     subject = get_subject()
     if not subject:
@@ -83,6 +87,7 @@ def diary2():
 
 
 @bp.route('/messages', methods=['POST'])
+@auth_required()
 def generate_messages():
     subject = get_subject()
     if not subject:
@@ -104,6 +109,7 @@ def generate_messages():
 
 
 @bp.route('/delete', methods=['POST'])
+@auth_required()
 def delete_events():
     # Access form properties, get subject information, get events, and delete
     subject = get_subject()
@@ -127,6 +133,7 @@ def delete_events():
 
 
 @bp.route('/task', methods=['POST'])
+@auth_required()
 def task():
     subject = get_subject()
     if not subject:
@@ -147,6 +154,7 @@ def task():
 
 
 @bp.route('/responses', methods=['POST'])
+@auth_required()
 def responses():
     subject = get_subject()
     if not subject:
@@ -176,6 +184,7 @@ def isisoformat(item):
 
 
 @bp.route('/progress', methods=['GET'])
+@auth_required()
 def progress():
     logfile = DEFAULT_LOGGING['handlers']['rotating_file']['filename']
     with open(logfile, 'r') as f:
@@ -188,11 +197,13 @@ def progress():
 
 
 @bp.route('/')
+@auth_required()
 def index():
     return flask.render_template('index.html')
 
 
 @bp.route('/validate', methods=['POST'])
+@auth_required()
 def validate():
     subject = get_subject()
     try:
@@ -215,6 +226,7 @@ def validate():
 
 
 @bp.route('/files', methods=['POST'])
+@auth_required()
 def download_files():
     subject = get_subject()
     if not subject:
@@ -230,6 +242,7 @@ def download_files():
 
 
 @bp.route('/update', methods=['POST'])
+@auth_required()
 def update():
     subject = get_subject()
     if not subject:
