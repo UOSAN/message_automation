@@ -3,53 +3,44 @@ This project automates parts of generating hundreds of text messages (SMS) sent
 to smoking study participants, receiving messages responding to interventions,
 and deleting scheduled messages that are not needed any more.
 
-## Endpoints
-### /
-Generate the text messages for a given participant.
+## Commands
+### Validate ID
+Verifies that the participant ID is in the form `ASHnnn` where n is a number.
+Looks up Participant ID in RedCap and indicates which sessions were found there. 
 
-Enter the participant ID, then press the "Generate messages" button. If successful, CSV file with all the messages to be sent to this
-participant is available to download.
-
-The participant ID must be in the form `ASHnnn` where n is a number. For example, ASH004 or ASH666 are valid participant IDs. 
-
-Generating messages takes about 4 minutes because of Apptoto's burst rate limits. Message generation is launched in a separate thread, whose progress will be shown at the bottom of any page on the site. It will generate and post 252 text messages for the intervention, 56 messages asking for number of cigarettes smoked each day of the intervention, and 12 messages for the daily diary sessions 2, 3, and 4.
-
-### /diary
-Generate the daily diary messages and quit date boosters for a given participant.
-
+### Generate DD1
+Generate events for the first round of daily diary messages.
 Use this endpoint after Session 0, preferable the day after, but before Session 1.
-
-Enter the participant ID, then press the "Create daily diary" button. If successful, a success message is displayed.
-
-The participant ID must be in the form `ASHnnn` where n is a number. For example, ASH004 or ASH666 are valid participant IDs. 
-
+If successful, a success message is displayed.
 Generating these messages takes only a few seconds.
 
-### /task
-Gets the input files for the values affirmation task, for a given participant.
+### Generate value task input
+Gets the input files for the values affirmation task for a given participant.
+This command goes to REDcap, gets the participant's most-highly rated value
+and least-highly rated value, and creates input files based on those values.
+If successful, the input files for the value
+affirmation task will be available to download.
 
-Enter the participant ID, then press the "Generate value task input" button. If successful, a ZIP file with all the input files for the value affirmation task is available to download.
+### Generate intervention SMS and DD2
+Generate the text messages for a given participant, including intervention messages, 
+messages about daily cigarette usage, messages for boosters, and daily diary round2.
+Generating messages takes about 4 minutes because of apptoto's burst rate limits.
+If successful, a .csv file with all the messages to be sent to this
+participant will be available to download.
 
-This endpoint goes to REDcap, gets the participants most-highly and least-highly rated values, and creates input files based on those values.
+### Generate DD3
+Generate events for the third round of daily diary messages.
+Generating these messages takes only a few seconds.
 
-### /delete
+### Get participant responses
+This endpoint returns all the text message responses from the participant, and
+the time they responded. These messages will be available for download in a file
+named ASHxxx_sms_conversations.csv
+
+### Delete messages
 Delete messages scheduled to be sent, for a given participant.
+This command deletes messages from the current day, going forward, so
+participants who leave the study are not receiving unwanted texts.
 
-Enter the participant ID, then press the "Delete messages" button.
-
-This endpoint deletes messages from the current day, going forward, so participants who leave the study are not receiving unwanted texts. This is a slow process, so it is launched in a separate thread, whose progress may be viewed at the bottom of any page on the site.
-
-### /downloads
-Location of .csv files to download
-
-### /cleanup
-Press the button on this page to delete all .csv files in the download directory.
-
-### /count/\<participant_id\>
-Get cigarette count responses from participants.
-
-This endpoint is a REST API endpoint, responding to GET, where <participant_id> is replaced with a valid participant ID. So, it would be accessed at https://message-automation.azurewebsites.net/count/ASH999, for example.
-
-This endpoint returns all the text message responses from the participant, and the time they responded. These responses are supposed to be the number of cigarettes smoked that day.
-
-This is a REST API endpoint to make it easier to script, and get the responses from multiple participants which can then be associated with other data from the study.
+### Download files for this subject
+Download a zip file containing any .csv files created for this participant.

@@ -10,7 +10,11 @@ Install the Azure command line interface tools:
 ```
 brew install azure-cli
 ```
-alternatively, on Ubuntu, follow the instructions on the azure web site. Then log in to azure on the command line:
+
+alternatively, on Ubuntu, follow the instructions on the azure web site.
+
+Then log in to azure on the command line: (use the login info of the lab DuckID account)
+
 ```
 az login
 ```
@@ -75,7 +79,30 @@ az webapp config appsettings set --resource-group sanlab_rg_Linux_westus2 --name
 This application is deployed using ZIP file deployments so that configuration
 that is not stored in git or github can be added to the ZIP file and uploaded to Azure.
 
-Create a zip file from the `src/`, `tests/` and `instance/` directories, at minimum.
+First, ls to the git repo directory, then
+
+create a zip file from the `src/`, `tests/` and `instance/` directories, at minimum.
 ```
 az webapp deployment source config-zip --resource-group sanlab_rg_Linux_westus2 --name message-automation --src message_automation.zip
 ```
+
+
+# Redeploy the app after making changes
+1. Make sure the github repo has the most updated scripts
+2. Pull the most updated repo to any local environment
+3. Get the current config.py and messages.csv file from Azure under the instance folder (These two files are not sync on github). 
+Log in to Azure portal -> go the the `message-automation` app service -> Development Tools -> SSH
+And the file is located at
+```
+ls instance/
+```
+Save the instance directory to the local environment. 
+4. Double check the `config.py` and make sure all the API tokens are correct
+5. create a new zip file from the `src/`, `tests/` and `instance/` directories
+6. redeploy the app
+```
+az webapp deployment source config-zip --resource-group sanlab_rg_Linux_westus2 --name message-automation --src message_automation.zip
+```
+
+# Trouble shooting
+Event logs and error messages are stored at Development Tools -> Advanced Tools -> Current Docker logs
