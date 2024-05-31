@@ -450,7 +450,8 @@ class EventGenerator:
 
         sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
         received = conversations[conversations.event_type == 'replied'].dropna(axis=1, how='all')
-        received = received.drop(columns=['UO_ID']) # temporary fix
+        if 'UO_ID' in received.columns:  # temporary fix
+            received = received.drop(columns=['UO_ID'])
 
         if sent.empty:
             return f'No messages sent for {self.participant_id}.'
