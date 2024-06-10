@@ -44,4 +44,3 @@ participants who leave the study are not receiving unwanted texts.
 
 ### Download files for this subject
 Download a zip file containing any .csv files created for this participant.
-

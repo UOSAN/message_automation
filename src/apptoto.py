@@ -77,13 +77,14 @@ class ApptotoError(Exception):
 
 class Apptoto:
     MAX_EVENTS = 200  # Max number of events to retrieve at one time
-    MAX_POST = 20  # Max number of events to post at one time
+    MAX_POST = 15  # Max number of events to post at one time
     TIMEOUT = 240
     # seconds between requests for apptoto burst rate limit, 100 requests per minute
     # minimum = 0.6
     REQUEST_LIMIT = 0.6
     ENDPOINT = 'https://api.apptoto.com/v1'
     HEADERS = {'Content-Type': 'application/json'}
+    RETRY = 5  # number of times to retry request
 
     def __init__(self, api_token: str, user: str):
         """
@@ -114,22 +115,30 @@ class Apptoto:
                                              unpicklable=False)
             logger.info('Posting events {} through {} of {} to apptoto'.format(i + 1, i + len(events_slice),
                                                                                len(events)))
+            attempts = 0
 
-            while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
-                time.sleep(0.1)
+            while attempts < self.RETRY:
 
-            r = requests.post(url=url,
-                              data=request_data,
-                              headers=self.HEADERS,
-                              timeout=self.TIMEOUT,
-                              auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+                while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
+                    time.sleep(0.1)
 
-            self._last_request_time = time.time()
+                print(f'lrt diff: {time.time() - self._last_request_time}')
+
+                self._last_request_time = time.time()
+                r = requests.post(url=url,
+                                  data=request_data,
+                                  headers=self.HEADERS,
+                                  timeout=self.TIMEOUT,
+                                  auth=HTTPBasicAuth(username=self._user, password=self._api_token))
+
+                if r.status_code == requests.codes.ok:
+                    break
+                else:
+                    attempts = attempts + 1
 
             if r.status_code != requests.codes.ok:
                 # logger.info('Failed to post events {} through {}, starting at {}'.format(i+1, len(events_slice),
-                #                                                                             events[i].start_time))
-
+                # events[i].start_time))
                 logger.error(f'Failed to post events - {str(r.status_code)} - {str(r.content)}')
                 raise ApptotoError('Failed to post events: {}'.format(r.status_code))
 
@@ -190,7 +199,7 @@ class Apptoto:
             r = None
             attempts = 0
 
-            while not r and attempts < 5:
+            while not r and attempts < self.RETRY:
                 while (time.time() - self._last_request_time) < self.REQUEST_LIMIT:
                     time.sleep(0.1)
 

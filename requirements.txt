@@ -7,3 +7,7 @@ numpy
 flask-executor
 pycap >= 2.0
 -r tests/requirements.txt
+flask-security-too
+flask-sqlalchemy
+bcrypt
+python-dotenv

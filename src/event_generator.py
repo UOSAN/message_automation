@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import re
 import json
+import time as tm
 
 from src.mylogging import DEFAULT_LOGGING
 from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant, ApptotoError
@@ -449,6 +450,8 @@ class EventGenerator:
 
         sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
         received = conversations[conversations.event_type == 'replied'].dropna(axis=1, how='all')
+        if 'UO_ID' in received.columns:  # temporary fix
+            received = received.drop(columns=['UO_ID'])
 
         if sent.empty:
             return f'No messages sent for {self.participant_id}.'
@@ -483,9 +486,9 @@ class EventGenerator:
         cig_rec = len(cig_convos[~cig_convos.content_rec.isnull()]['participants.event_id'].unique())
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            response_rate = 100 * (sms_rec + cig_rec) / (sms_sent + cig_sent)
-            cig_rr = 100 * cig_rec / cig_sent
-            sms_rr = 100 * sms_rec / sms_sent
+            response_rate = 100 * np.divide((sms_rec + cig_rec), (sms_sent + cig_sent))
+            cig_rr = 100 * np.divide(cig_rec, cig_sent)
+            sms_rr = 100 * np.divide(sms_rec, sms_sent)
 
         with open(csv_path / f'{self.participant_id}_summary.txt', 'w') as f:
             f.write(f'SMS messages sent: {sms_sent}\n')
@@ -530,6 +533,7 @@ class EventGenerator:
         logger.info(f'Found {len(event_ids)} events for {self.participant_id}')
 
         deleted = 0
+
         for event_id in event_ids:
             self.apptoto.delete_event(event_id)
             deleted += 1
@@ -542,7 +546,6 @@ class EventGenerator:
         # Add or change phone & email to match redcap information
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
-
 
         begin = datetime.now(timezone.utc)
 
