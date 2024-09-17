@@ -10,6 +10,8 @@ import numpy as np
 import re
 import json
 import time as tm
+import asyncio
+import re
 
 from src.mylogging import DEFAULT_LOGGING
 from src.apptoto import Apptoto, ApptotoEvent, ApptotoParticipant, ApptotoError
@@ -338,18 +340,20 @@ class EventGenerator:
         n = 0
         for day in range(DAYS_1 + DAYS_2):
             message_date = quit_date + timedelta(days=day)
-            if message_date == quit_date:
-                start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
-            else:
-                start_time = datetime.combine(message_date, wake_time)
+            # if message_date == quit_date:
+            #     start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
+            # else:
+            #     start_time = datetime.combine(message_date, wake_time)
 
-            if message_date in booster_dates:
-                end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=4)
-            elif message_date in round2_dates:
-                end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
-            else:
-                end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+            # if message_date in booster_dates:
+            #     end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=4)
+            # elif message_date in round2_dates:
+            #     end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+            # else:
+            #     end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
 
+            (start_time, end_time) = self.make_intervention_startend(message_date, subject, booster_dates, round2_dates)
+            
             # Get times each day to send messages
             # Send 5 messages a day for the first 28 days, 4 after
             if day in range(DAYS_1):
@@ -383,6 +387,23 @@ class EventGenerator:
             messages.write_to_file(f, columns=['UO_ID', 'Message'])
 
         return f'Messages written to {subject.id}_messages.csv'
+
+    def make_intervention_startend(self, message_date, subject, booster_dates, round2_dates):
+        quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
+        wake_time = time.fromisoformat(subject.redcap.s0.waketime)
+        sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+        if message_date == quit_date:
+            start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
+        else:
+            start_time = datetime.combine(message_date, wake_time)
+
+        if message_date in booster_dates:
+            end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=4)
+        elif message_date in round2_dates:
+            end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+        else:
+            end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+        return (start_time, end_time)
 
     def generate_task_files(self):
         subject = RedcapParticipant(self.participant_id,
@@ -510,7 +531,7 @@ class EventGenerator:
 
     def delete_messages(self):
 
-        begin = datetime.now(timezone.utc)
+        begin = datetime.today() + timedelta(days=1)
         """
         'new' way, currently too slow
         event_ids = self._get_event_ids()
@@ -599,6 +620,82 @@ class EventGenerator:
         self.apptoto.put_events(updated_events)
 
         return f'Updated {len(updated_events)} events for subject {subject.id}'
+    
+    async def update_times(self):
+        subject = RedcapParticipant(self.participant_id,
+                                    self.config['redcap_api_token'])
+        
+        quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
+        wake_time = time.fromisoformat(subject.redcap.s0.waketime)
+        sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+        
+        begin = datetime.combine(date.today() + timedelta(days=1), time(0, 0, 0))
+
+        events = self.apptoto.get_events_by_contact(begin,
+                                                    external_id=self.participant_id,
+                                                    calendar_id=ASH_CALENDAR_ID)
+
+        if not events:
+            return f'No future events for subject {subject.id}'
+
+        cleanup_task = asyncio.create_task(self.cleanup_old_messages(events))
+
+        e_df = pd.DataFrame.from_records(events)
+        e_df.drop_duplicates(subset='id', inplace=True)
+        e_df.drop(columns='is_deleted', inplace=True)
+
+        #intervention_df = e_df[e_df["title"] == "ASH SMS"]
+        booster_df = e_df[re.search("Booster", e_df["title"])]
+        booster_dates = booster_df["start_time"].apply(lambda date: self.get_date(date)).to_list()
+        round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
+        round2_dates = round2_df[["start_time"]].appy(lambda date: self.get_date(date)).to_list()
+
+        async with asyncio.TaskGroup() as tg:
+            for e in events:
+                if (e.title == "ASH SMS"):
+                    tg.create_task(self.update_intervention_time(e, subject, booster_dates, round2_dates))
+                else:
+                    tg.create_task(self.update_message_time(e, quit_date, wake_time, sleep_time))
+
+        await cleanup_task
+
+        self.apptoto.post_events(events)
+
+        return f'Updated timing of {len(events)} events for subject {subject.id}'
+
+    async def cleanup_old_messages(self, events):
+        for e in events:
+            self.apptoto.delete_event(e.id)
+        return
+
+    async def update_message_time(self, event, quit_date, wake_time, sleep_time):
+        del event.id
+
+        event.start_time = await self.get_new_time(event.title, self.get_date(event.start_time), 
+                                                   quit_date, wake_time, sleep_time)
+
+        return
+
+    async def get_new_time(self, title, message_date, quit_date, wake_time, sleep_time):
+        if (re.search("UO: Day Before", title)): 
+            return datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
+        elif (re.search("UO: Quite Date", title)):
+            return datetime.combine(quit_date, wake_time) + timedelta(hours=3)
+        elif (re.search("ASH CIGS", title)):
+            return datetime.combine(message_date, sleep_time) - timedelta(hours=1)
+        elif (re.search("Booster \d+$", title)):
+            return datetime.combine(message_date, sleep_time) - timedelta(hours=3)
+        elif (re.search("ASH Daily Diary", title)):
+            return datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+        
+    async def update_intervention_time(self, event, subject, booster_dates, round2_dates):
+        (start_time, end_time) = self.make_intervention_startend(self.get_date(event.start_time), 
+                                                                 subject, booster_dates, round2_dates)
+        return 0
+
+    def get_date(input):
+        #gets the date portion of the string for the datetime of an apptoto event
+        return datetime.strptime(re.split('-\d+:\d+$', re.sub('T', ' ', input[2:]))[0], '%y-%m-%d %H:%M:%S').date()
 
     # do we need to check primary phone/email?
     def update_contact(self, update_events=False):
