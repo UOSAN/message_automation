@@ -619,6 +619,8 @@ class EventGenerator:
 
         self.apptoto.put_events(updated_events)
 
+        asyncio.run(self.update_times())
+
         return f'Updated {len(updated_events)} events for subject {subject.id}'
     
     async def update_times(self):
@@ -692,21 +694,16 @@ class EventGenerator:
                                                 time_zone=subject.redcap.s0.timezone))
 
         posted_events = self.apptoto.post_events(apptoto_events)
-        #I don't know if this is necessary, or if I can just not do this and it will be fine
-        #I just don't want to need to mess around with the .csv
-        # self._update_events_file(posted_events)
+        #This might be unnecessary, and if so I'll remove the bloat
+        self._update_events_file(posted_events)
+        messages = Messages(self.message_file)
+        csv_path = Path(DOWNLOAD_DIR)
+        if not csv_path.exists():
+            csv_path.mkdir()
+        f = csv_path / (subject.id + '_updated_messages.csv')
+        messages.write_to_file(f, columns=['UO_ID', 'Message'])
 
-        # csv_path = Path(DOWNLOAD_DIR)
-        # if not csv_path.exists():
-        #     csv_path.mkdir()
-        # f = csv_path / (subject.id + '_messages.csv')
-        # messages.write_to_file(f, columns=['UO_ID', 'Message'])
-
-        # return f'Messages written to {subject.id}_messages.csv'
-
-        self.apptoto.post_events(events)
-
-        return f'Updated timing of {len(events)} events for subject {subject.id}'
+        return f'Updated timing of {len(apptoto_events)} events for subject {subject.id}'
 
     async def cleanup_old_messages(self, events):
         for e in events:
