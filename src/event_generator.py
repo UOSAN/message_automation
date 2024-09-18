@@ -625,6 +625,10 @@ class EventGenerator:
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
         
+        participants = [ApptotoParticipant(subject.redcap.s0.initials,
+                                           subject.redcap.s0.phone,
+                                           subject.redcap.s0.email)]
+        
         quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
@@ -658,11 +662,47 @@ class EventGenerator:
                                                                                                     wake_time=wake_time, sleep_time=sleep_time), axis=1)
         events.extend(nonintervention_df.to_list())
 
-        #make dates easy to read, then convert to list, split into sublists based on matching days, randomly space every sublist, recombine into big list
-        intervention_df["start_time"] = intervention_df.apply(lambda event: self.get_intervention_time(), axis=1)
-        events.extend(intervention_df.to_list())
+        intervention_df["start_time"] = intervention_df["start_time"].apply(lambda date: self.get_date(date))
+        intervention_list = intervention_df.to_list()
+        intervention_list.sort(key=(lambda event: event["start_time"]))
+        intervention_list_list = list
+        
+        current = intervention_list[0]["start_time"]
+        currentGroup = list
+        for event in intervention_list:
+            if event["start_time"] != current:
+                intervention_list_list.append(currentGroup.copy())
+                currentGroup.clear()
+                current = event["start_time"]
+            currentGroup.append(event)
+
+        for dayGroup in intervention_list_list:
+            self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
+            events.extend(dayGroup)
 
         await cleanup_task
+
+        apptoto_events = []
+        for e in sorted(events):
+            apptoto_events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
+                                                title=e.title,
+                                                start_time=e.time,
+                                                content=e.content,
+                                                participants=participants,
+                                                time_zone=subject.redcap.s0.timezone))
+
+        posted_events = self.apptoto.post_events(apptoto_events)
+        #I don't know if this is necessary, or if I can just not do this and it will be fine
+        #I just don't want to need to mess around with the .csv
+        # self._update_events_file(posted_events)
+
+        # csv_path = Path(DOWNLOAD_DIR)
+        # if not csv_path.exists():
+        #     csv_path.mkdir()
+        # f = csv_path / (subject.id + '_messages.csv')
+        # messages.write_to_file(f, columns=['UO_ID', 'Message'])
+
+        # return f'Messages written to {subject.id}_messages.csv'
 
         self.apptoto.post_events(events)
 
@@ -671,7 +711,6 @@ class EventGenerator:
     async def cleanup_old_messages(self, events):
         for e in events:
             self.apptoto.delete_event(e.id)
-        return
 
     def get_new_time(self, event, quit_date, wake_time, sleep_time):
 
@@ -689,10 +728,15 @@ class EventGenerator:
         elif (re.search("ASH Daily Diary", title)):
             return datetime.combine(message_date, sleep_time) - timedelta(hours=2)
         
-    async def get_intervention_time(self, events_df, event, subject, booster_dates, round2_dates):
-        (start_time, end_time) = self.make_intervention_startend(self.get_date(event.start_time), 
+    def get_intervention_time(self, events, subject, booster_dates, round2_dates):
+        (start_time, end_time) = self.make_intervention_startend(events[0]["start_time"], 
                                                                  subject, booster_dates, round2_dates)
-        return 0
+        times_list = random_times(start_time, end_time, len(events))
+        n = 0
+        for t in times_list:
+            # Prepend each message with "UO: "
+            events[n]["start_time"] = t
+            n = n + 1
 
     def get_date(input):
         #gets the date portion of the string for the datetime of an apptoto event
