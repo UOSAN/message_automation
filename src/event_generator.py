@@ -643,19 +643,24 @@ class EventGenerator:
         e_df = pd.DataFrame.from_records(events)
         e_df.drop_duplicates(subset='id', inplace=True)
         e_df.drop(columns='is_deleted', inplace=True)
+        e_df.drop(columns="end_time", inplace=True)
+        e_df.drop(columns="id", inplace=True)
+        events.clear()
 
-        #intervention_df = e_df[e_df["title"] == "ASH SMS"]
-        booster_df = e_df[re.search("Booster", e_df["title"])]
-        booster_dates = booster_df["start_time"].apply(lambda date: self.get_date(date)).to_list()
-        round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
-        round2_dates = round2_df[["start_time"]].appy(lambda date: self.get_date(date)).to_list()
+        intervention_df = e_df[e_df["title"] == "ASH SMS"]
+        nonintervention_df = e_df[e_df["title"] != "ASH SMS"]
+        #booster_df = e_df[e_df["title"].str.contains("Booster")]
+        booster_dates = e_df[e_df["title"].str.contains("Booster")]["start_time"].apply(lambda date: self.get_date(date)).to_list()
+        #round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
+        round2_dates = e_df[e_df["title"] == "ASH Daily Diary"]["start_time"].apply(lambda date: self.get_date(date)).to_list()
 
-        async with asyncio.TaskGroup() as tg:
-            for e in events:
-                if (e.title == "ASH SMS"):
-                    tg.create_task(self.update_intervention_time(e, subject, booster_dates, round2_dates))
-                else:
-                    tg.create_task(self.update_message_time(e, quit_date, wake_time, sleep_time))
+        nonintervention_df["start_time"] = nonintervention_df.apply(lambda event: self.get_new_time(event=event, quit_date=quit_date, 
+                                                                                                    wake_time=wake_time, sleep_time=sleep_time), axis=1)
+        events.extend(nonintervention_df.to_list())
+
+        #make dates easy to read, then convert to list, split into sublists based on matching days, randomly space every sublist, recombine into big list
+        intervention_df["start_time"] = intervention_df.apply(lambda event: self.get_intervention_time(), axis=1)
+        events.extend(intervention_df.to_list())
 
         await cleanup_task
 
@@ -668,15 +673,11 @@ class EventGenerator:
             self.apptoto.delete_event(e.id)
         return
 
-    async def update_message_time(self, event, quit_date, wake_time, sleep_time):
-        del event.id
+    def get_new_time(self, event, quit_date, wake_time, sleep_time):
 
-        event.start_time = await self.get_new_time(event.title, self.get_date(event.start_time), 
-                                                   quit_date, wake_time, sleep_time)
+        title = event["title"]
+        message_date = self.get_date(event["start_time"])
 
-        return
-
-    async def get_new_time(self, title, message_date, quit_date, wake_time, sleep_time):
         if (re.search("UO: Day Before", title)): 
             return datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
         elif (re.search("UO: Quite Date", title)):
@@ -688,7 +689,7 @@ class EventGenerator:
         elif (re.search("ASH Daily Diary", title)):
             return datetime.combine(message_date, sleep_time) - timedelta(hours=2)
         
-    async def update_intervention_time(self, event, subject, booster_dates, round2_dates):
+    async def get_intervention_time(self, events_df, event, subject, booster_dates, round2_dates):
         (start_time, end_time) = self.make_intervention_startend(self.get_date(event.start_time), 
                                                                  subject, booster_dates, round2_dates)
         return 0
