@@ -682,8 +682,6 @@ class EventGenerator:
             self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
             events.extend(dayGroup)
 
-        await cleanup_task
-
         apptoto_events = []
         for e in sorted(events):
             apptoto_events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
@@ -692,6 +690,8 @@ class EventGenerator:
                                                 content=e.content,
                                                 participants=participants,
                                                 time_zone=subject.redcap.s0.timezone))
+
+        await cleanup_task
 
         posted_events = self.apptoto.post_events(apptoto_events)
         #This might be unnecessary, and if so I'll remove the bloat
