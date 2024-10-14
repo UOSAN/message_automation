@@ -12,3 +12,4 @@ flask-sqlalchemy
 bcrypt
 python-dotenv
 asyncio
+argon2_cffi
