@@ -101,7 +101,7 @@ Save the instance directory to the local environment.
 5. create a new zip file from the `src/`, `tests/` and `instance/` directories, as well as .env and requirements.txt
 6. redeploy the app
 ```
-az webapp deployment source config-zip --resource-group sanlab_rg_Linux_westus2 --name message-automation --src message_automation.zip
+az webapp deploy --resource-group sanlab_rg_Linux_westus2 --name message-automation --src-path message_automation.zip --async true
 ```
 
 # Trouble shooting
