@@ -455,7 +455,7 @@ class EventGenerator:
 
         csv_path = Path(DOWNLOAD_DIR)
         if conversations.empty:
-            return f'No conversatinos found for {self.participant_id}.'
+            return f'No conversations found for {self.participant_id}.'
 
         conversations = conversations[conversations.calendar_id == ASH_CALENDAR_ID]
         conversations['start_time'] = pd.to_datetime(conversations['start_time'])
