@@ -454,6 +454,18 @@ class EventGenerator:
                                                 ['participants', 'event_id']])
 
         csv_path = Path(DOWNLOAD_DIR)
+
+        #FOR TESTING ONLY, THIS MUST BE COMMENTED OUT IN RELEASE VERSIONS
+        # allevents = self.apptoto.get_events_by_contact(begin,
+        #                                                external_id=self.participant_id,
+        #                                                calendar_id=ASH_CALENDAR_ID)
+        # #allevents = pd.json_normalize(allevents, meta=['title', 'start_time', 'content', 'id'])
+        # with open(csv_path / f'{self.participant_id}_all_events_TESTING.txt', 'w') as f:
+        #     for e in allevents:
+        #         f.write(f'Event: {e["title"]}, {e["content"]}, {e["start_time"]}\n')
+        # logger.info(f'Events written to {self.participant_id}_all_events_TESTING.txt')
+        #END OF TEST BLOCK
+
         if conversations.empty:
             return f'No conversations found for {self.participant_id}.'
 
@@ -582,6 +594,7 @@ class EventGenerator:
                                                     calendar_id=ASH_CALENDAR_ID)
 
         if not events:
+            logger.info(f"Could not find any events for subject {subject.id}")
             return f'No future events for subject {subject.id}'
 
         e_df = pd.DataFrame.from_records(events)
@@ -637,65 +650,72 @@ class EventGenerator:
         
         begin = datetime.combine(date.today() + timedelta(days=1), time(0, 0, 0))
 
-        events = self.apptoto.get_events_by_contact(begin,
+        eRaw = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID)
 
-        if not events:
+
+        if not eRaw:
             return f'No future events for subject {subject.id}'
 
-        cleanup_task = asyncio.create_task(self.cleanup_old_messages(events))
+        cleanup_task = asyncio.create_task(self.cleanup_old_messages(eRaw))
 
-        e_df = pd.DataFrame.from_records(events)
-        e_df.drop_duplicates(subset='id', inplace=True)
+        e_df = pd.DataFrame.from_records(eRaw)
+        #e_df.drop_duplicates(subset='id', inplace=True)
         e_df.drop(columns='is_deleted', inplace=True)
         e_df.drop(columns="end_time", inplace=True)
         e_df.drop(columns="id", inplace=True)
-        events.clear()
+        events = []
 
         intervention_df = e_df[e_df["title"] == "ASH SMS"]
         nonintervention_df = e_df[e_df["title"] != "ASH SMS"]
         #booster_df = e_df[e_df["title"].str.contains("Booster")]
-        booster_dates = e_df[e_df["title"].str.contains("Booster")]["start_time"].apply(lambda date: self.get_date(date)).to_list()
+        booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
         #round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
-        round2_dates = e_df[e_df["title"] == "ASH Daily Diary"]["start_time"].apply(lambda date: self.get_date(date)).to_list()
+        round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
+        nonintervention_df["start_time"] = nonintervention_df.apply(lambda row: self.get_new_time(title=row['title'], start=row['start_time'],
+                                                                                                  quit_date=quit_date, wake_time=wake_time, sleep_time=sleep_time),
+                                                                    axis=1)
+        events.extend(self.make_event_list_from_df(nonintervention_df))
 
-        nonintervention_df["start_time"] = nonintervention_df.apply(lambda event: self.get_new_time(event=event, quit_date=quit_date, 
-                                                                                                    wake_time=wake_time, sleep_time=sleep_time), axis=1)
-        events.extend(nonintervention_df.to_list())
+        intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
+        intervention_list = self.make_event_list_from_df(intervention_df)
+        intervention_list = sorted(intervention_list, key=lambda e: e.time)
+        intervention_list_list = []
 
-        intervention_df["start_time"] = intervention_df["start_time"].apply(lambda date: self.get_date(date))
-        intervention_list = intervention_df.to_list()
-        intervention_list.sort(key=(lambda event: event["start_time"]))
-        intervention_list_list = list
-        
-        current = intervention_list[0]["start_time"]
-        currentGroup = list
+        current = intervention_list[0].time
+        currentGroup = []
+        #Iterates through events and groups them by day
         for event in intervention_list:
-            if event["start_time"] != current:
+            if event.time != current:
                 intervention_list_list.append(currentGroup.copy())
                 currentGroup.clear()
-                current = event["start_time"]
+                current = event.time
             currentGroup.append(event)
+        intervention_list_list.append(currentGroup.copy())
 
         for dayGroup in intervention_list_list:
-            self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
-            events.extend(dayGroup)
+            group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
+            events.extend(group)
 
         apptoto_events = []
-        for e in sorted(events):
+
+        for e in events:
             apptoto_events.append(ApptotoEvent(calendar=self.config['apptoto_calendar'],
-                                                title=e.title,
-                                                start_time=e.time,
-                                                content=e.content,
-                                                participants=participants,
-                                                time_zone=subject.redcap.s0.timezone))
+                                               title=e.title,
+                                               start_time=e.time,
+                                               content=e.content,
+                                               participants=participants,
+                                               time_zone=subject.redcap.s0.timezone))
 
         await cleanup_task
 
-        posted_events = self.apptoto.post_events(apptoto_events)
+        with open(Path(DOWNLOAD_DIR) / f'{self.participant_id}_TestLog2.txt', 'w') as f:
+            for a_e in apptoto_events:
+                f.write(f'Event: {a_e.title}, {a_e.start_time}, {a_e.content}\n')
+        posted_events = self.apptoto.post_events(apptoto_events) #COMMENT OUT FOR TESTING
         #This might be unnecessary, and if so I'll remove the bloat
-        self._update_events_file(posted_events)
+        self._update_events_file(posted_events) #COMMENT OUT FOR TESTING
         messages = Messages(self.message_file)
         csv_path = Path(DOWNLOAD_DIR)
         if not csv_path.exists():
@@ -706,17 +726,18 @@ class EventGenerator:
         return f'Updated timing of {len(apptoto_events)} events for subject {subject.id}'
 
     async def cleanup_old_messages(self, events):
+        logger.info("Beginning cleanup")
         for e in events:
-            self.apptoto.delete_event(e.id)
+            logger.info(f'Deleting event {e["id"]}')
+            self.apptoto.delete_event(e["id"])
+        logger.info("Finished cleanup")
 
-    def get_new_time(self, event, quit_date, wake_time, sleep_time):
-
-        title = event["title"]
-        message_date = self.get_date(event["start_time"])
+    def get_new_time(self, title, start, quit_date, wake_time, sleep_time):
+        message_date = self.get_date(start)
 
         if (re.search("UO: Day Before", title)): 
             return datetime.combine(quit_date - timedelta(days=1), wake_time) + timedelta(hours=3)
-        elif (re.search("UO: Quite Date", title)):
+        elif (re.search("UO: Quit Date", title)):
             return datetime.combine(quit_date, wake_time) + timedelta(hours=3)
         elif (re.search("ASH CIGS", title)):
             return datetime.combine(message_date, sleep_time) - timedelta(hours=1)
@@ -726,18 +747,28 @@ class EventGenerator:
             return datetime.combine(message_date, sleep_time) - timedelta(hours=2)
         
     def get_intervention_time(self, events, subject, booster_dates, round2_dates):
-        (start_time, end_time) = self.make_intervention_startend(events[0]["start_time"], 
+        (start_time, end_time) = self.make_intervention_startend(events[0].time,
                                                                  subject, booster_dates, round2_dates)
         times_list = random_times(start_time, end_time, len(events))
         n = 0
+        Event = namedtuple('Event', ['time', 'title', 'content'])
+        newEvents = []
         for t in times_list:
-            # Prepend each message with "UO: "
-            events[n]["start_time"] = t
+            newEvents.append(Event(time=t, title=events[n].title, content=events[n].content))
             n = n + 1
+        return newEvents
 
-    def get_date(input):
+    def get_date(self, inStr):
         #gets the date portion of the string for the datetime of an apptoto event
-        return datetime.strptime(re.split('-\d+:\d+$', re.sub('T', ' ', input[2:]))[0], '%y-%m-%d %H:%M:%S').date()
+        return datetime.strptime(re.split('-\d+:\d+$', re.sub('T', ' ', inStr[2:]))[0], '%y-%m-%d %H:%M:%S').date()
+
+    def make_event_list_from_df(self, df):
+        edict = df.to_dict('records')
+        Event = namedtuple('Event', ['time', 'title', 'content'])
+        elist = []
+        for e in edict:
+            elist.append(Event(time=e['start_time'], title=e['title'], content=e['content']))
+        return elist
 
     # do we need to check primary phone/email?
     def update_contact(self, update_events=False):
