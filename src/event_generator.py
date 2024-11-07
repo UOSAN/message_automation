@@ -360,6 +360,7 @@ class EventGenerator:
                 n_messages = MESSAGES_PER_DAY_1
             else:
                 n_messages = MESSAGES_PER_DAY_2
+
             times_list = random_times(start_time, end_time, n_messages)
             for t in times_list:
                 # Prepend each message with "UO: "
@@ -389,9 +390,11 @@ class EventGenerator:
         return f'Messages written to {subject.id}_messages.csv'
 
     def make_intervention_startend(self, message_date, subject, booster_dates, round2_dates):
+        # Get subject info
         quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+
         if message_date == quit_date:
             start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
         else:
@@ -403,6 +406,12 @@ class EventGenerator:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
         else:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+        
+        # Check for night shift and adjust
+        if sleep_time < wake_time:
+            start_time = start_time + timedelta(hours=12)
+            end_time = sleep_time + timedelta(hours=12)
+
         return (start_time, end_time)
 
     def generate_task_files(self):
