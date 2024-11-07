@@ -75,10 +75,10 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
     # minimum minutes between times
     min_interval = 60
-    delta = end - start
+    delta = end - start if end > start else start - end
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
     r = [(min_interval - 1) * i + x for i, x in enumerate(sorted(random.sample(range(range_max), n)))]
-    times = [start + timedelta(minutes=x) for x in r]
+    times = [(start if end > start else end) + timedelta(minutes=x) for x in r]
     return times
 
 
@@ -406,11 +406,6 @@ class EventGenerator:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
         else:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
-        
-        # Check for night shift and adjust
-        if sleep_time < wake_time:
-            start_time = start_time + timedelta(hours=12)
-            end_time = sleep_time + timedelta(hours=12)
 
         return (start_time, end_time)
 
