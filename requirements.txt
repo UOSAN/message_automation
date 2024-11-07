@@ -11,3 +11,4 @@ flask-security-too
 flask-sqlalchemy
 bcrypt
 python-dotenv
+argon2_cffi
