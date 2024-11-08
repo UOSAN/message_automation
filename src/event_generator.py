@@ -658,7 +658,20 @@ class EventGenerator:
         if not eRaw:
             return f'No future events for subject {subject.id}'
 
-        cleanup_task = asyncio.create_task(self.cleanup_old_messages(eRaw))
+        sleepUnchanged = False
+        wakeUnchanged = False
+        # logger.info(f'W{wake_time}, S{sleep_time}')
+        # for e in eRaw:
+        #     logger.info(f'E: {e["title"]}, {e["start_time"]}')
+        #     if re.search("ASH Daily Diary", e["title"]):
+        #         if (e["start_time"] == sleep_time - timedelta(hours=2)):
+        #             sleepUnchanged = True
+        #     elif (re.search("UO: Quit Date", e["title"])):
+        #         if (e["start_time"] == wake_time + timedelta(hours=3)):
+        #             wakeUnchanged = True
+        #     if sleepUnchanged and wakeUnchanged:
+        #         logger.info("Test 0")
+        #         #return f"Subject {subject.id}'s wake and sleep times are unchanged"
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
@@ -670,33 +683,35 @@ class EventGenerator:
         intervention_df = e_df[e_df["title"] == "ASH SMS"]
         nonintervention_df = e_df[e_df["title"] != "ASH SMS"]
         #booster_df = e_df[e_df["title"].str.contains("Booster")]
-        booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
         #round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
-        round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
         nonintervention_df["start_time"] = nonintervention_df.apply(lambda row: self.get_new_time(title=row['title'], start=row['start_time'],
                                                                                                   quit_date=quit_date, wake_time=wake_time, sleep_time=sleep_time),
                                                                     axis=1)
         events.extend(self.make_event_list_from_df(nonintervention_df))
 
-        intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
-        intervention_list = self.make_event_list_from_df(intervention_df)
-        intervention_list = sorted(intervention_list, key=lambda e: e.time)
-        intervention_list_list = []
+        if (not intervention_df.empty):
+            booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
+            round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
+            intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
+            intervention_list = self.make_event_list_from_df(intervention_df)
+            logger.info("Step 3")
+            intervention_list = sorted(intervention_list, key=lambda e: e.time)
+            intervention_list_list = []
 
-        current = intervention_list[0].time
-        currentGroup = []
-        #Iterates through events and groups them by day
-        for event in intervention_list:
-            if event.time != current:
-                intervention_list_list.append(currentGroup.copy())
-                currentGroup.clear()
-                current = event.time
-            currentGroup.append(event)
-        intervention_list_list.append(currentGroup.copy())
+            current = intervention_list[0].time
+            currentGroup = []
+            #Iterates through events and groups them by day
+            for event in intervention_list:
+                if event.time != current:
+                    intervention_list_list.append(currentGroup.copy())
+                    currentGroup.clear()
+                    current = event.time
+                currentGroup.append(event)
+            intervention_list_list.append(currentGroup.copy())
 
-        for dayGroup in intervention_list_list:
-            group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
-            events.extend(group)
+            for dayGroup in intervention_list_list:
+                group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
+                events.extend(group)
 
         apptoto_events = []
 
@@ -708,7 +723,7 @@ class EventGenerator:
                                                participants=participants,
                                                time_zone=subject.redcap.s0.timezone))
 
-        await cleanup_task
+        self.cleanup_old_messages(eRaw)
 
         with open(Path(DOWNLOAD_DIR) / f'{self.participant_id}_TestLog2.txt', 'w') as f:
             for a_e in apptoto_events:
@@ -722,10 +737,11 @@ class EventGenerator:
             csv_path.mkdir()
         f = csv_path / (subject.id + '_updated_messages.csv')
         messages.write_to_file(f, columns=['UO_ID', 'Message'])
+        logger.info(f'Updated messages written to {subject.id}_updated_messages.csv')
 
         return f'Updated timing of {len(apptoto_events)} events for subject {subject.id}'
 
-    async def cleanup_old_messages(self, events):
+    def cleanup_old_messages(self, events):
         logger.info("Beginning cleanup")
         for e in events:
             logger.info(f'Deleting event {e["id"]}')
