@@ -75,10 +75,14 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
     # minimum minutes between times
     min_interval = 60
-    delta = end - start if end > start else start - end
+    delta = end - start
+    if end < start:
+        delta = (end + timedelta(hours=12)) - (start - timedelta(hours=12))
+    if int(delta.total_seconds() / 60) < 5:
+        logger.info("Subject is only awake for 10 hours on average")
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
     r = [(min_interval - 1) * i + x for i, x in enumerate(sorted(random.sample(range(range_max), n)))]
-    times = [(start if end > start else end) + timedelta(minutes=x) for x in r]
+    times = [start + timedelta(minutes=x) for x in r]
     return times
 
 
