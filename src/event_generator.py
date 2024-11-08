@@ -76,6 +76,10 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     # minimum minutes between times
     min_interval = 60
     delta = end - start
+    if end < start:
+        delta = (end + timedelta(hours=12)) - (start - timedelta(hours=12))
+    if int(delta.total_seconds() / 60) < 5:
+        logger.info("Subject is only awake for 10 hours on average")
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
     r = [(min_interval - 1) * i + x for i, x in enumerate(sorted(random.sample(range(range_max), n)))]
     times = [start + timedelta(minutes=x) for x in r]
@@ -360,6 +364,7 @@ class EventGenerator:
                 n_messages = MESSAGES_PER_DAY_1
             else:
                 n_messages = MESSAGES_PER_DAY_2
+
             times_list = random_times(start_time, end_time, n_messages)
             for t in times_list:
                 # Prepend each message with "UO: "
@@ -389,9 +394,11 @@ class EventGenerator:
         return f'Messages written to {subject.id}_messages.csv'
 
     def make_intervention_startend(self, message_date, subject, booster_dates, round2_dates):
+        # Get subject info
         quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+
         if message_date == quit_date:
             start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
         else:
@@ -403,6 +410,7 @@ class EventGenerator:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
         else:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+
         return (start_time, end_time)
 
     def generate_task_files(self):
