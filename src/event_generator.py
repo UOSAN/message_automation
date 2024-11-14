@@ -500,13 +500,13 @@ class EventGenerator:
         elif received.empty:
             merged = sent.rename(columns={'at': 'at_sent', 'content': 'content_sent', 'title': 'title_sent'})
             merged['at_rec'] = pd.NaT
-            merged['content_rec'] = np.NaN
+            merged['content_rec'] = np.nan
 
         else:
             merged = sent.merge(received, on='participants.event_id', suffixes=('_sent', '_rec'), how='outer')
 
         if 'UO_ID' not in merged.columns:
-            merged['UO_ID'] = np.NaN
+            merged['UO_ID'] = np.nan
 
         columns = ['at_sent', 'UO_ID', 'content_sent', 'at_rec', 'content_rec']
         header = ['sent_at', 'UO_ID', 'message', 'replied_at', 'reply']
