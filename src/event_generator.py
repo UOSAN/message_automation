@@ -690,24 +690,18 @@ class EventGenerator:
         e_df.drop(columns="id", inplace=True)
         events = []
 
-        logger.info("Step 1")
         intervention_df = e_df[e_df["title"] == "ASH SMS"]
         nonintervention_df = e_df[e_df["title"] != "ASH SMS"]
-        #booster_df = e_df[e_df["title"].str.contains("Booster")]
-        #round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
-        logger.info("Step 2")
         nonintervention_df["start_time"] = nonintervention_df.apply(lambda row: self.get_new_time(title=row['title'], start=row['start_time'],
                                                                                                   quit_date=quit_date, wake_time=wake_time, sleep_time=sleep_time),
                                                                     axis=1)
         events.extend(self.make_event_list_from_df(nonintervention_df))
 
         if (not intervention_df.empty):
-            logger.info("Step 3")
             booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
             round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
             intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
             intervention_list = self.make_event_list_from_df(intervention_df)
-            logger.info("Step 4")
             intervention_list = sorted(intervention_list, key=lambda e: e.time)
             intervention_list_list = []
 
@@ -736,14 +730,13 @@ class EventGenerator:
                                                participants=participants,
                                                time_zone=subject.redcap.s0.timezone))
 
-        self.cleanup_old_messages(eRaw)
+        self.cleanup_old_messages(eRaw) # COMMENT OUT DURING TESTING
 
-        with open(Path(DOWNLOAD_DIR) / f'{self.participant_id}_TestLog2.txt', 'w') as f:
-            for a_e in apptoto_events:
-                f.write(f'Event: {a_e.title}, {a_e.start_time}, {a_e.content}\n')
-        posted_events = self.apptoto.post_events(apptoto_events) #COMMENT OUT FOR TESTING
-        #This might be unnecessary, and if so I'll remove the bloat
-        self._update_events_file(posted_events) #COMMENT OUT FOR TESTING
+        # with open(Path(DOWNLOAD_DIR) / f'{self.participant_id}_TestLog2.txt', 'w') as f:
+        #     for a_e in apptoto_events:
+        #         f.write(f'Event: {a_e.title}, {a_e.start_time}, {a_e.content}\n')
+        posted_events = self.apptoto.post_events(apptoto_events) # COMMENT OUT DURING TESTING
+        self._update_events_file(posted_events) # COMMENT OUT DURING TESTING
         messages = Messages(self.message_file)
         csv_path = Path(DOWNLOAD_DIR)
         if not csv_path.exists():
