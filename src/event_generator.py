@@ -666,22 +666,31 @@ class EventGenerator:
         if not eRaw:
             return f'No future events for subject {subject.id}'
 
+        # Checks if the times need to be updated or not (currently only quit date and daily diary)
         sleepUnchanged = False
         anySleep = False
         wakeUnchanged = False
         anyWake = False
-        # logger.info(f'W{wake_time}, S{sleep_time}')
-        # for e in eRaw:
-        #     logger.info(f'E: {e["title"]}, {e["start_time"]}')
-        #     if re.search("ASH Daily Diary", e["title"]):
-        #         if (e["start_time"] == sleep_time - timedelta(hours=2)):
-        #             sleepUnchanged = True
-        #     elif (re.search("UO: Quit Date", e["title"])):
-        #         if (e["start_time"] == wake_time + timedelta(hours=3)):
-        #             wakeUnchanged = True
-        #     if sleepUnchanged and wakeUnchanged:
-        #         logger.info("Test 0")
-        #         #return f"Subject {subject.id}'s wake and sleep times are unchanged"
+        logger.info(f'W{wake_time}, S{sleep_time}')
+        for e in eRaw:
+            logger.info(f'E: {e["title"]}, {e["start_time"]}')
+            if re.search("ASH Daily Diary", e["title"]):
+                anySleep = True
+                if (e["start_time"] == datetime.combine(datetime.date(e["start_time"]), sleep_time) - timedelta(hours=2)):
+                    sleepUnchanged = True
+                    logger.info("Same time for sleep")
+            elif (re.search("UO: Quit Date", e["title"])):
+                anyWake = True
+                if (e["start_time"] == datetime.combine(datetime.date(e["start_time"]), wake_time) + timedelta(hours=3)):
+                    wakeUnchanged = True
+                    logger.info("Same time for wake")
+        if not anyWake:
+            wakeUnchanged = True
+        if not anySleep:
+            sleepUnchanged = True
+        if sleepUnchanged and wakeUnchanged:
+            logger.info("Times unchanged")
+            #return f"Subject {subject.id}'s wake and sleep times are unchanged"
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
