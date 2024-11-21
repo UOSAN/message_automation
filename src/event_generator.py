@@ -674,14 +674,16 @@ class EventGenerator:
         logger.info(f'W{wake_time}, S{sleep_time}')
         for e in eRaw:
             logger.info(f'E: {e["title"]}, {e["start_time"]}')
+            date = self.get_date(e["start_time"])
+            #'2024-12-15T11:00:00-08:00'
             if re.search("ASH Daily Diary", e["title"]):
                 anySleep = True
-                if (e["start_time"] == datetime.combine(datetime.date(e["start_time"]), sleep_time) - timedelta(hours=2)):
+                if (e["start_time"] == datetime.combine(date, sleep_time) - timedelta(hours=2)):
                     sleepUnchanged = True
                     logger.info("Same time for sleep")
             elif (re.search("UO: Quit Date", e["title"])):
                 anyWake = True
-                if (e["start_time"] == datetime.combine(datetime.date(e["start_time"]), wake_time) + timedelta(hours=3)):
+                if (e["start_time"] == datetime.combine(date, wake_time) + timedelta(hours=3)):
                     wakeUnchanged = True
                     logger.info("Same time for wake")
         if not anyWake:
