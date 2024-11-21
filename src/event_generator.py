@@ -673,10 +673,11 @@ class EventGenerator:
         anyWake = False
         logger.info(f'W{wake_time}, S{sleep_time}')
         for e in eRaw:
-            logger.info(f'E: {e["title"]}, {e["start_time"]}')
             mesDate = self.get_date(e["start_time"])
             #'2024-12-15T11:00:00-08:00'
             if re.search("ASH Daily Diary", e["title"]):
+                if not anySleep:
+                    logger.info(f'M: {e["start_time"]}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
                 if (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2)):
                     sleepUnchanged = True
@@ -692,7 +693,7 @@ class EventGenerator:
             sleepUnchanged = True
         if sleepUnchanged and wakeUnchanged:
             logger.info("Times unchanged")
-            #return f"Subject {subject.id}'s wake and sleep times are unchanged"
+            return f"Subject {subject.id}'s wake and sleep times are unchanged"
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
