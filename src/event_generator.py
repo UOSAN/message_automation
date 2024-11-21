@@ -676,6 +676,8 @@ class EventGenerator:
             mesDate = self.get_date(e["start_time"])
             #'2024-12-15T11:00:00-08:00'
             if re.search("ASH Daily Diary", e["title"]):
+                if not anySleep:
+                    logger.info(f'M: {e["start_time"]}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
                 if (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2)):
                     sleepUnchanged = True
