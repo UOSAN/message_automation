@@ -673,27 +673,29 @@ class EventGenerator:
         anyWake = False
         logger.info(f'W{wake_time}, S{sleep_time}')
         for e in eRaw:
+            logger.info("Step 0")
             mesDate = self.get_date(e["start_time"])
             #'2024-12-15T11:00:00-08:00'
             if re.search("ASH Daily Diary", e["title"]):
+                logger.info("Step 1.A")
                 if not anySleep:
                     logger.info(f'M: {e["start_time"]}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
-                if (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2)):
-                    sleepUnchanged = True
-                    logger.info("Same time for sleep")
+                sleepUnchanged = (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2))
             elif (re.search("UO: Quit Date", e["title"])):
+                logger.info("Step 1.B")
                 anyWake = True
-                if (e["start_time"] == datetime.combine(mesDate, wake_time) + timedelta(hours=3)):
-                    wakeUnchanged = True
-                    logger.info("Same time for wake")
+                wakeUnchanged = (e["start_time"] == datetime.combine(mesDate, wake_time) + timedelta(hours=3))
         if not anyWake:
             wakeUnchanged = True
         if not anySleep:
             sleepUnchanged = True
+        logger.info("Step 2")
         if sleepUnchanged and wakeUnchanged:
             logger.info("Times unchanged")
             return f"Subject {subject.id}'s wake and sleep times are unchanged"
+
+        logger.info("Step 3")
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
