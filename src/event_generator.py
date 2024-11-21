@@ -679,14 +679,10 @@ class EventGenerator:
                 if not anySleep:
                     logger.info(f'M: {e["start_time"]}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
-                if (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2)):
-                    sleepUnchanged = True
-                    logger.info("Same time for sleep")
+                sleepUnchanged = (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2))
             elif (re.search("UO: Quit Date", e["title"])):
                 anyWake = True
-                if (e["start_time"] == datetime.combine(mesDate, wake_time) + timedelta(hours=3)):
-                    wakeUnchanged = True
-                    logger.info("Same time for wake")
+                wakeUnchanged = (e["start_time"] == datetime.combine(mesDate, wake_time) + timedelta(hours=3))
         if not anyWake:
             wakeUnchanged = True
         if not anySleep:
