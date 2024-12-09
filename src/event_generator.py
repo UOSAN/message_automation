@@ -674,15 +674,16 @@ class EventGenerator:
         logger.info(f'W{wake_time}, S{sleep_time}')
         for e in eRaw:
             mesDate = self.get_date(e["start_time"])
-            #'2024-12-15T11:00:00-08:00'
+            mesTimeString = re.sub('T', ' ', e["start_time"][2:])
+            logger.info(mesTimeString)
+            #'2024-12-15 11:00:00-08:00'
             if re.search("ASH Daily Diary", e["title"]):
                 logger.info("Step 1.A")
                 logger.info(mesDate)
-                logger.info(e["start_time"])
                 if not anySleep:
-                    logger.info(f'M: {e["start_time"]}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
+                    logger.info(f'M: {mesTimeString}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
-                sleepUnchanged = (e["start_time"] == datetime.combine(mesDate, sleep_time) - timedelta(hours=2))
+                sleepUnchanged = (mesTimeString == datetime.strftime(datetime.combine(mesDate, sleep_time) - timedelta(hours=2), "%Y-%m-%d %H:%M:%S"))
             elif (re.search("UO: Quit Date", e["title"])):
                 logger.info("Step 1.B")
                 logger.info(mesDate)
