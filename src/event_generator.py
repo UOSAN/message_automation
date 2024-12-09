@@ -680,8 +680,10 @@ class EventGenerator:
             if re.search("ASH Daily Diary", e["title"]):
                 logger.info("Step 1.A")
                 logger.info(mesDate)
+                logger.info(e["start_time"].isoformat())
+                logger.info(e["start_time"])
                 if not anySleep:
-                    logger.info(f'M: {mesTimeString}   T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
+                    logger.info(f'M: {e["start_time"]} T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
                 sleepUnchanged = (mesTimeString == datetime.strftime(datetime.combine(mesDate, sleep_time) - timedelta(hours=2), "%Y-%m-%d %H:%M:%S"))
             elif (re.search("UO: Quit Date", e["title"])):
