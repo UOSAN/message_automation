@@ -671,44 +671,21 @@ class EventGenerator:
         anySleep = False
         wakeUnchanged = False
         anyWake = False
-        logger.info(f'W{wake_time}, S{sleep_time}')
         for e in eRaw:
-            mesDate = self.get_date(e["start_time"])
-            mesTimeString = re.sub('T', ' ', e["start_time"][2:])
-            logger.info(mesTimeString)
-            #'2024-12-15 11:00:00-08:00'
+            mesDTime = datetime.fromisoformat(e["start_time"])
             if re.search("ASH Daily Diary", e["title"]):
-                logger.info("Step 1.A")
-                logger.info(mesDate)
-                logger.info(e["start_time"].isoformat())
-                logger.info(e["start_time"])
-                if not anySleep:
-                    logger.info(f'M: {e["start_time"]} T: {datetime.combine(mesDate, sleep_time) - timedelta(hours=2)}')
                 anySleep = True
-                sleepUnchanged = (mesTimeString == datetime.strftime(datetime.combine(mesDate, sleep_time) - timedelta(hours=2), "%Y-%m-%d %H:%M:%S"))
+                sleepUnchanged = (mesDTime == datetime.combine(mesDTime.date(), sleep_time, mesDTime.tzinfo) - timedelta(hours=2))
             elif (re.search("UO: Quit Date", e["title"])):
-                logger.info("Step 1.B")
-                logger.info(mesDate)
-                logger.info(e["start_time"])
                 anyWake = True
-                wakeUnchanged = (e["start_time"] == datetime.combine(mesDate, wake_time) + timedelta(hours=3))
+                wakeUnchanged = (mesDTime == datetime.combine(mesDTime.date(), wake_time, mesDTime.tzinfo) + timedelta(hours=3))
         if not anyWake:
             wakeUnchanged = True
         if not anySleep:
             sleepUnchanged = True
-        logger.info("Step 2")
-        if wakeUnchanged:
-            logger.info("WU")
-        if sleepUnchanged:
-            logger.info("SU")
         if sleepUnchanged and wakeUnchanged:
-            logger.info("Times unchanged")
+            logger.info(f"Subject {subject.id}'s wake and sleep times are unchanged")
             return f"Subject {subject.id}'s wake and sleep times are unchanged"
-
-        logger.info("Step 3")
-
-        forcefail = 1 / 0
-        logger.info(forcefail)
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
