@@ -75,9 +75,15 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
     # minimum minutes between times
     min_interval = 60
-    delta = end - start
     if end < start:
+        needAdjust = True
+        adjust = end.time
+        end = end - timedelta(days=-1, hours=adjust, seconds=1)
+        start = start - timedelta(hours=adjust)
         delta = (end + timedelta(hours=12)) - (start - timedelta(hours=12))
+    delta = end - start
+    if needAdjust:
+        delta = delta + timedelta(hours=adjust, seconds=1)
     if int(delta.total_seconds() / 60) < 5:
         logger.info("Subject is only awake for 10 hours on average")
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
@@ -486,7 +492,7 @@ class EventGenerator:
 
         conversations['at'] = pd.to_datetime(conversations['at'])
 
-        # for debugging only
+        # FOR DEBUGGING ONLY
         # conversations.to_csv(csv_path / f'{self.participant_id}_all_conversations.csv', date_format='%x %X')
 
         sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
