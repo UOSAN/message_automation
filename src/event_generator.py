@@ -75,9 +75,11 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
     # minimum minutes between times
     min_interval = 60
-    delta = end - start
+    # checks for night shift or late sleep time
     if end < start:
-        delta = (end + timedelta(hours=12)) - (start - timedelta(hours=12))
+        # adjusts start time to be before end time, pushing events 'forward' and earlier
+        start = start - timedelta(days=-1)
+    delta = end - start
     if int(delta.total_seconds() / 60) < 5:
         logger.info("Subject is only awake for 10 hours on average")
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
@@ -486,7 +488,7 @@ class EventGenerator:
 
         conversations['at'] = pd.to_datetime(conversations['at'])
 
-        # for debugging only
+        # FOR DEBUGGING ONLY
         # conversations.to_csv(csv_path / f'{self.participant_id}_all_conversations.csv', date_format='%x %X')
 
         sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
@@ -552,6 +554,9 @@ class EventGenerator:
     def delete_messages(self):
 
         begin = datetime.today() + timedelta(days=1)
+
+        if (self.participant_id == "ASH990"):
+            begin = datetime(year=2021, month=4, day=1)
         """
         'new' way, currently too slow
         event_ids = self._get_event_ids()
