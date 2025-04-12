@@ -75,15 +75,11 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
     # minimum minutes between times
     min_interval = 60
+    # checks for night shift or late sleep time
     if end < start:
-        needAdjust = True
-        adjust = end.time
-        end = end - timedelta(days=-1, hours=adjust, seconds=1)
-        start = start - timedelta(hours=adjust)
-        delta = (end + timedelta(hours=12)) - (start - timedelta(hours=12))
+        # adjusts start time to be before end time, pushing events 'forward' and earlier
+        start = start - timedelta(days=-1)
     delta = end - start
-    if needAdjust:
-        delta = delta + timedelta(hours=adjust, seconds=1)
     if int(delta.total_seconds() / 60) < 5:
         logger.info("Subject is only awake for 10 hours on average")
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
@@ -558,6 +554,9 @@ class EventGenerator:
     def delete_messages(self):
 
         begin = datetime.today() + timedelta(days=1)
+
+        if (self.participant_id == "ASH990"):
+            begin = datetime(year=2021, month=4, day=1)
         """
         'new' way, currently too slow
         event_ids = self._get_event_ids()
