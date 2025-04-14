@@ -78,7 +78,7 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     # checks for night shift or late sleep time
     if end < start:
         # adjusts start time to be before end time, pushing events 'forward' and earlier
-        start = start - timedelta(days=-1)
+        start = start - timedelta(days=1)
     delta = end - start
     if int(delta.total_seconds() / 60) < 5:
         logger.info("Subject is only awake for 10 hours on average")
@@ -555,7 +555,7 @@ class EventGenerator:
 
         begin = datetime.today() + timedelta(days=1)
 
-        if (self.participant_id == "ASH990"):
+        if self.participant_id == "ASH990":
             begin = datetime(year=2021, month=4, day=1)
         """
         'new' way, currently too slow
@@ -594,6 +594,8 @@ class EventGenerator:
                                     self.config['redcap_api_token'])
 
         begin = datetime.now(timezone.utc)
+        if self.participant_id == "ASH990":
+            begin = datetime(year=2021, month=4, day=1)
 
         # this would be another way, never implemented
         """event_ids = self._get_event_ids()
@@ -650,40 +652,47 @@ class EventGenerator:
         return f'Updated {len(updated_events)} events for subject {subject.id}'
     
     async def update_times(self):
+        logger.info("655")
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
-        
+
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
                                            subject.redcap.s0.email)]
-        
+
         quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
-        
-        begin = datetime.combine(date.today() + timedelta(days=1), time(0, 0, 0))
 
+        begin = datetime.combine(date.today() + timedelta(days=1), time(0, 0, 0))
+        if self.participant_id == "ASH990":
+            begin = datetime(year=2021, month=4, day=1)
+
+        # Unprocessed list of events
         eRaw = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID)
-
-
+        logger.info("675")
         if not eRaw:
+            logger.info(f'No future events for subject {subject.id}')
             return f'No future events for subject {subject.id}'
-
+        logger.info("679")
         # Checks if the times need to be updated or not (currently only quit date and daily diary)
         sleepUnchanged = False
         anySleep = False
         wakeUnchanged = False
         anyWake = False
+        oldSleepTime = datetime.now()
+        logger.info("686")
         for e in eRaw:
-            mesDTime = datetime.fromisoformat(e["start_time"])
+            msgDTime = datetime.fromisoformat(e["start_time"])
             if re.search("ASH Daily Diary", e["title"]):
                 anySleep = True
-                sleepUnchanged = (mesDTime == datetime.combine(mesDTime.date(), sleep_time, mesDTime.tzinfo) - timedelta(hours=2))
+                oldSleepTime = msgDTime + timedelta(hours=2)
+                sleepUnchanged = (msgDTime == datetime.combine(msgDTime.date(), sleep_time, msgDTime.tzinfo) - timedelta(hours=2))
             elif (re.search("UO: Quit Date", e["title"])):
                 anyWake = True
-                wakeUnchanged = (mesDTime == datetime.combine(mesDTime.date(), wake_time, mesDTime.tzinfo) + timedelta(hours=3))
+                wakeUnchanged = (msgDTime == datetime.combine(msgDTime.date(), wake_time, msgDTime.tzinfo) + timedelta(hours=3))
         if not anyWake:
             wakeUnchanged = True
         if not anySleep:
@@ -691,6 +700,8 @@ class EventGenerator:
         if sleepUnchanged and wakeUnchanged:
             logger.info(f"Subject {subject.id}'s wake and sleep times are unchanged")
             return f"Subject {subject.id}'s wake and sleep times are unchanged"
+
+        logger.info("703")
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
@@ -705,25 +716,36 @@ class EventGenerator:
                                                                                                   quit_date=quit_date, wake_time=wake_time, sleep_time=sleep_time),
                                                                     axis=1)
         events.extend(self.make_event_list_from_df(nonintervention_df))
+        logger.info("719")
 
         if (not intervention_df.empty):
             booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
             round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
-            intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
+            # intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
+            intervention_df["start_time"] = intervention_df.apply(lambda row: datetime.fromisoformat(row['start_time']), axis=1)
             intervention_list = self.make_event_list_from_df(intervention_df)
             intervention_list = sorted(intervention_list, key=lambda e: e.time)
             intervention_list_list = []
 
-            current = intervention_list[0].time
+            firstTime = intervention_list[0].time
+            logger.info("730")
+            currentSleep = datetime.combine(date=firstTime.date(), time=oldSleepTime.time(), tzinfo=oldSleepTime.tzinfo)
+            logger.info("732")
             currentGroup = []
+            i = 0
             #Iterates through events and groups them by day
             for event in intervention_list:
-                if event.time != current:
-                    intervention_list_list.append(currentGroup.copy())
+                logger.info(f'737: {i}')
+                if event.time > currentSleep:
+                    if len(currentGroup) > 0:
+                        intervention_list_list.append(currentGroup.copy())
                     currentGroup.clear()
-                    current = event.time
+                    currentSleep = currentSleep + timedelta(days=1)
                 currentGroup.append(event)
+                i += 1
             intervention_list_list.append(currentGroup.copy())
+
+            logger.info("747")
 
             for dayGroup in intervention_list_list:
                 group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
@@ -780,6 +802,8 @@ class EventGenerator:
     def get_intervention_time(self, events, subject, booster_dates, round2_dates):
         (start_time, end_time) = self.make_intervention_startend(events[0].time,
                                                                  subject, booster_dates, round2_dates)
+        if start_time > end_time:
+            end_time = end_time + timedelta(days=1)
         times_list = random_times(start_time, end_time, len(events))
         n = 0
         Event = namedtuple('Event', ['time', 'title', 'content'])
