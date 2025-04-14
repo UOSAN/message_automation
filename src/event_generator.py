@@ -652,7 +652,6 @@ class EventGenerator:
         return f'Updated {len(updated_events)} events for subject {subject.id}'
     
     async def update_times(self):
-        logger.info("655")
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
 
@@ -672,18 +671,16 @@ class EventGenerator:
         eRaw = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID)
-        logger.info("675")
         if not eRaw:
             logger.info(f'No future events for subject {subject.id}')
             return f'No future events for subject {subject.id}'
-        logger.info("679")
         # Checks if the times need to be updated or not (currently only quit date and daily diary)
         sleepUnchanged = False
         anySleep = False
         wakeUnchanged = False
         anyWake = False
         oldSleepTime = datetime.now()
-        logger.info("686")
+
         for e in eRaw:
             msgDTime = datetime.fromisoformat(e["start_time"])
             if re.search("ASH Daily Diary", e["title"]):
@@ -701,8 +698,6 @@ class EventGenerator:
             logger.info(f"Subject {subject.id}'s wake and sleep times are unchanged")
             return f"Subject {subject.id}'s wake and sleep times are unchanged"
 
-        logger.info("703")
-
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
         e_df.drop(columns='is_deleted', inplace=True)
@@ -716,7 +711,6 @@ class EventGenerator:
                                                                                                   quit_date=quit_date, wake_time=wake_time, sleep_time=sleep_time),
                                                                     axis=1)
         events.extend(self.make_event_list_from_df(nonintervention_df))
-        logger.info("719")
 
         if (not intervention_df.empty):
             booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
@@ -728,24 +722,17 @@ class EventGenerator:
             intervention_list_list = []
 
             firstTime = intervention_list[0].time
-            logger.info("730")
             currentSleep = datetime.combine(date=firstTime.date(), time=oldSleepTime.time(), tzinfo=oldSleepTime.tzinfo)
-            logger.info("732")
             currentGroup = []
-            i = 0
             #Iterates through events and groups them by day
             for event in intervention_list:
-                logger.info(f'737: {i}')
                 if event.time > currentSleep:
                     if len(currentGroup) > 0:
                         intervention_list_list.append(currentGroup.copy())
                     currentGroup.clear()
                     currentSleep = currentSleep + timedelta(days=1)
                 currentGroup.append(event)
-                i += 1
             intervention_list_list.append(currentGroup.copy())
-
-            logger.info("747")
 
             for dayGroup in intervention_list_list:
                 group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
