@@ -75,7 +75,13 @@ def random_times(start: datetime, end: datetime, n: int) -> List[datetime]:
     """
     # minimum minutes between times
     min_interval = 60
+    # checks for night shift or late sleep time
+    if end < start:
+        # adjusts start time to be before end time, pushing events 'forward' and earlier
+        start = start - timedelta(days=1)
     delta = end - start
+    if int(delta.total_seconds() / 60) < 5:
+        logger.info("Subject is only awake for 10 hours on average")
     range_max = int(delta.total_seconds() / 60) - ((min_interval - 1) * (n - 1))
     r = [(min_interval - 1) * i + x for i, x in enumerate(sorted(random.sample(range(range_max), n)))]
     times = [start + timedelta(minutes=x) for x in r]
@@ -360,6 +366,7 @@ class EventGenerator:
                 n_messages = MESSAGES_PER_DAY_1
             else:
                 n_messages = MESSAGES_PER_DAY_2
+
             times_list = random_times(start_time, end_time, n_messages)
             for t in times_list:
                 # Prepend each message with "UO: "
@@ -389,9 +396,11 @@ class EventGenerator:
         return f'Messages written to {subject.id}_messages.csv'
 
     def make_intervention_startend(self, message_date, subject, booster_dates, round2_dates):
+        # Get subject info
         quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
+
         if message_date == quit_date:
             start_time = datetime.combine(message_date, wake_time) + timedelta(hours=4)
         else:
@@ -403,6 +412,7 @@ class EventGenerator:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=3)
         else:
             end_time = datetime.combine(message_date, sleep_time) - timedelta(hours=2)
+
         return (start_time, end_time)
 
     def generate_task_files(self):
@@ -478,7 +488,7 @@ class EventGenerator:
 
         conversations['at'] = pd.to_datetime(conversations['at'])
 
-        # for debugging only
+        # FOR DEBUGGING ONLY
         # conversations.to_csv(csv_path / f'{self.participant_id}_all_conversations.csv', date_format='%x %X')
 
         sent = conversations[conversations.event_type == 'sent'].dropna(axis=1, how='all')
@@ -492,13 +502,13 @@ class EventGenerator:
         elif received.empty:
             merged = sent.rename(columns={'at': 'at_sent', 'content': 'content_sent', 'title': 'title_sent'})
             merged['at_rec'] = pd.NaT
-            merged['content_rec'] = np.NaN
+            merged['content_rec'] = np.nan
 
         else:
             merged = sent.merge(received, on='participants.event_id', suffixes=('_sent', '_rec'), how='outer')
 
         if 'UO_ID' not in merged.columns:
-            merged['UO_ID'] = np.NaN
+            merged['UO_ID'] = np.nan
 
         columns = ['at_sent', 'UO_ID', 'content_sent', 'at_rec', 'content_rec']
         header = ['sent_at', 'UO_ID', 'message', 'replied_at', 'reply']
@@ -544,6 +554,9 @@ class EventGenerator:
     def delete_messages(self):
 
         begin = datetime.today() + timedelta(days=1)
+
+        if self.participant_id == "ASH990":
+            begin = datetime(year=2021, month=4, day=1)
         """
         'new' way, currently too slow
         event_ids = self._get_event_ids()
@@ -581,6 +594,8 @@ class EventGenerator:
                                     self.config['redcap_api_token'])
 
         begin = datetime.now(timezone.utc)
+        if self.participant_id == "ASH990":
+            begin = datetime(year=2021, month=4, day=1)
 
         # this would be another way, never implemented
         """event_ids = self._get_event_ids()
@@ -639,26 +654,49 @@ class EventGenerator:
     async def update_times(self):
         subject = RedcapParticipant(self.participant_id,
                                     self.config['redcap_api_token'])
-        
+
         participants = [ApptotoParticipant(subject.redcap.s0.initials,
                                            subject.redcap.s0.phone,
                                            subject.redcap.s0.email)]
-        
+
         quit_date = date.fromisoformat(subject.redcap.s1.quitdate)
         wake_time = time.fromisoformat(subject.redcap.s0.waketime)
         sleep_time = time.fromisoformat(subject.redcap.s0.sleeptime)
-        
-        begin = datetime.combine(date.today() + timedelta(days=1), time(0, 0, 0))
 
+        begin = datetime.combine(date.today() + timedelta(days=1), time(0, 0, 0))
+        if self.participant_id == "ASH990":
+            begin = datetime(year=2021, month=4, day=1)
+
+        # Unprocessed list of events
         eRaw = self.apptoto.get_events_by_contact(begin,
                                                     external_id=self.participant_id,
                                                     calendar_id=ASH_CALENDAR_ID)
-
-
         if not eRaw:
+            logger.info(f'No future events for subject {subject.id}')
             return f'No future events for subject {subject.id}'
+        # Checks if the times need to be updated or not (currently only quit date and daily diary)
+        sleepUnchanged = False
+        anySleep = False
+        wakeUnchanged = False
+        anyWake = False
+        oldSleepTime = datetime.now()
 
-        cleanup_task = asyncio.create_task(self.cleanup_old_messages(eRaw))
+        for e in eRaw:
+            msgDTime = datetime.fromisoformat(e["start_time"])
+            if re.search("ASH Daily Diary", e["title"]):
+                anySleep = True
+                oldSleepTime = msgDTime + timedelta(hours=2)
+                sleepUnchanged = (msgDTime == datetime.combine(msgDTime.date(), sleep_time, msgDTime.tzinfo) - timedelta(hours=2))
+            elif (re.search("UO: Quit Date", e["title"])):
+                anyWake = True
+                wakeUnchanged = (msgDTime == datetime.combine(msgDTime.date(), wake_time, msgDTime.tzinfo) + timedelta(hours=3))
+        if not anyWake:
+            wakeUnchanged = True
+        if not anySleep:
+            sleepUnchanged = True
+        if sleepUnchanged and wakeUnchanged:
+            logger.info(f"Subject {subject.id}'s wake and sleep times are unchanged")
+            return f"Subject {subject.id}'s wake and sleep times are unchanged"
 
         e_df = pd.DataFrame.from_records(eRaw)
         #e_df.drop_duplicates(subset='id', inplace=True)
@@ -669,34 +707,36 @@ class EventGenerator:
 
         intervention_df = e_df[e_df["title"] == "ASH SMS"]
         nonintervention_df = e_df[e_df["title"] != "ASH SMS"]
-        #booster_df = e_df[e_df["title"].str.contains("Booster")]
-        booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
-        #round2_df = e_df[e_df["title"] == "ASH Daily Diary"]
-        round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
         nonintervention_df["start_time"] = nonintervention_df.apply(lambda row: self.get_new_time(title=row['title'], start=row['start_time'],
                                                                                                   quit_date=quit_date, wake_time=wake_time, sleep_time=sleep_time),
                                                                     axis=1)
         events.extend(self.make_event_list_from_df(nonintervention_df))
 
-        intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
-        intervention_list = self.make_event_list_from_df(intervention_df)
-        intervention_list = sorted(intervention_list, key=lambda e: e.time)
-        intervention_list_list = []
+        if (not intervention_df.empty):
+            booster_dates = e_df[e_df["title"].str.contains("Booster")].apply(lambda row: self.get_date(row['start_time']), axis=1).to_list()
+            round2_dates = e_df[e_df["title"] == "ASH Daily Diary"].apply(lambda row: self.get_date(row['start_time']), axis=1)['start_time'].to_list()
+            # intervention_df["start_time"] = intervention_df.apply(lambda row: self.get_date(row['start_time']), axis=1)
+            intervention_df["start_time"] = intervention_df.apply(lambda row: datetime.fromisoformat(row['start_time']), axis=1)
+            intervention_list = self.make_event_list_from_df(intervention_df)
+            intervention_list = sorted(intervention_list, key=lambda e: e.time)
+            intervention_list_list = []
 
-        current = intervention_list[0].time
-        currentGroup = []
-        #Iterates through events and groups them by day
-        for event in intervention_list:
-            if event.time != current:
-                intervention_list_list.append(currentGroup.copy())
-                currentGroup.clear()
-                current = event.time
-            currentGroup.append(event)
-        intervention_list_list.append(currentGroup.copy())
+            firstTime = intervention_list[0].time
+            currentSleep = datetime.combine(date=firstTime.date(), time=oldSleepTime.time(), tzinfo=oldSleepTime.tzinfo)
+            currentGroup = []
+            #Iterates through events and groups them by day
+            for event in intervention_list:
+                if event.time > currentSleep:
+                    if len(currentGroup) > 0:
+                        intervention_list_list.append(currentGroup.copy())
+                    currentGroup.clear()
+                    currentSleep = currentSleep + timedelta(days=1)
+                currentGroup.append(event)
+            intervention_list_list.append(currentGroup.copy())
 
-        for dayGroup in intervention_list_list:
-            group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
-            events.extend(group)
+            for dayGroup in intervention_list_list:
+                group = self.get_intervention_time(dayGroup, subject, booster_dates, round2_dates)
+                events.extend(group)
 
         apptoto_events = []
 
@@ -708,24 +748,24 @@ class EventGenerator:
                                                participants=participants,
                                                time_zone=subject.redcap.s0.timezone))
 
-        await cleanup_task
+        self.cleanup_old_messages(eRaw) # COMMENT OUT DURING TESTING
 
-        with open(Path(DOWNLOAD_DIR) / f'{self.participant_id}_TestLog2.txt', 'w') as f:
-            for a_e in apptoto_events:
-                f.write(f'Event: {a_e.title}, {a_e.start_time}, {a_e.content}\n')
-        posted_events = self.apptoto.post_events(apptoto_events) #COMMENT OUT FOR TESTING
-        #This might be unnecessary, and if so I'll remove the bloat
-        self._update_events_file(posted_events) #COMMENT OUT FOR TESTING
+        # with open(Path(DOWNLOAD_DIR) / f'{self.participant_id}_TestLog2.txt', 'w') as f:
+        #     for a_e in apptoto_events:
+        #         f.write(f'Event: {a_e.title}, {a_e.start_time}, {a_e.content}\n')
+        posted_events = self.apptoto.post_events(apptoto_events) # COMMENT OUT DURING TESTING
+        self._update_events_file(posted_events) # COMMENT OUT DURING TESTING
         messages = Messages(self.message_file)
         csv_path = Path(DOWNLOAD_DIR)
         if not csv_path.exists():
             csv_path.mkdir()
         f = csv_path / (subject.id + '_updated_messages.csv')
         messages.write_to_file(f, columns=['UO_ID', 'Message'])
+        logger.info(f'Updated messages written to {subject.id}_updated_messages.csv')
 
         return f'Updated timing of {len(apptoto_events)} events for subject {subject.id}'
 
-    async def cleanup_old_messages(self, events):
+    def cleanup_old_messages(self, events):
         logger.info("Beginning cleanup")
         for e in events:
             logger.info(f'Deleting event {e["id"]}')
@@ -749,6 +789,8 @@ class EventGenerator:
     def get_intervention_time(self, events, subject, booster_dates, round2_dates):
         (start_time, end_time) = self.make_intervention_startend(events[0].time,
                                                                  subject, booster_dates, round2_dates)
+        if start_time > end_time:
+            end_time = end_time + timedelta(days=1)
         times_list = random_times(start_time, end_time, len(events))
         n = 0
         Event = namedtuple('Event', ['time', 'title', 'content'])
